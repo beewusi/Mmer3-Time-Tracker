@@ -111,20 +111,24 @@
 
 .ai-chat-input-row {
   display: flex;
+  align-items: flex-end;
   gap: 8px;
   padding: 10px;
   border-top: 1px solid var(--gray-100);
 }
 
-.ai-chat-input-row input {
+.ai-chat-input-row textarea {
   flex: 1;
   padding: 8px 10px;
   border: 1px solid var(--gray-300);
   border-radius: var(--radius-sm);
   font-size: 13px;
+  line-height: 1.45;
+  font-family: inherit;
+  resize: none;
 }
 
-.ai-chat-input-row input:focus {
+.ai-chat-input-row textarea:focus {
   border-color: var(--blue);
   outline: none;
 }

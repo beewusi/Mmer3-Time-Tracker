@@ -12,6 +12,7 @@ import './Dashboard.css';
 import Profile from './Profile';
 import AIChatWidget from '../components/AIChatWidget';
 import SessionTimeline from '../components/SessionTimeline';
+import AutoTextarea from '../components/AutoTextarea';
 import { PieChart, Pie, Cell, Tooltip } from 'recharts';
 import {
   HourglassIcon, DashboardIcon, TimesheetIcon, BellIcon,
@@ -48,11 +49,19 @@ const EMPLOYEE_FAQ_ITEMS = [
   },
   {
     q: 'How do I request time off?',
-    a: 'Go to the Time Off tab and fill in the form, or describe it in plain English and press "Fill form" to have it filled in for you. Check the details, then press Submit Request.'
+    a: 'Go to the Time Off tab and fill in the form. Or click "Describe it instead", type something like "Sick leave tomorrow" and press "Fill form" to have it filled in for you. Check the details, then press Submit request. Days are counted as weekdays only, public holidays aren’t counted, and dates in the past can’t be picked.'
   },
   {
     q: 'How do I know if my time off was approved?',
     a: 'Check "Your requests" on the Time Off tab. It shows the status of each request and any note your admin left when approving or rejecting it. You can cancel a request while it’s still pending.'
+  },
+  {
+    q: 'How do I check my timesheet?',
+    a: 'Click Timesheet in the menu. Switch between Daily, Weekly, Monthly and All Records at the top, and use the arrows to move between periods. Click a day to see that day as a timeline of work and breaks, with the total at the top. A session that’s still running is included.'
+  },
+  {
+    q: 'Where can I see how many hours I’ve worked?',
+    a: 'The Worked Hours card on your Dashboard shows today’s total and number of sessions. The Activities card shows a daily, weekly or monthly summary, and the Timesheet tab has the full breakdown.'
   },
   {
     q: 'Can I edit my timesheet?',
@@ -63,10 +72,37 @@ const EMPLOYEE_FAQ_ITEMS = [
     a: 'Click your name at the bottom of the menu to open your Profile, then click the pencil icon on your picture. Your email and department can only be changed by an admin.'
   },
   {
+    q: 'How do I change my password?',
+    a: 'Open your Profile (click your name at the bottom of the menu) and use the Change Password card. If you’ve forgotten it, use "Forgot password?" on the sign in page and follow the link in the email.'
+  },
+  {
+    q: 'How do reminders and notifications work?',
+    a: 'The Reminders tab lists the automatic reminders (break reminders at 2 and 3 hours, clock out at 8 hours, auto clock out at 8 hours 15 minutes). There you can also switch on desktop notifications, a weekly summary email and a missed clock-in reminder.'
+  },
+  {
     q: 'How do I switch to dark mode?',
-    a: 'Use the Dark/Light toggle at the top right of the Dashboard page.'
+    a: 'Use the Dark/Light toggle at the top right of the Dashboard page. Your choice is remembered on this browser.'
+  },
+  {
+    q: 'Can I make the menu smaller?',
+    a: 'Yes, on a computer click the panel icon next to Mmerℇ at the top of the menu to shrink it to icons only. Click the same icon above your name to open it again.'
+  },
+  {
+    q: 'Where can I read how my information is used?',
+    a: 'The Privacy Notice and Terms of Use are linked on the sign in and sign up pages.'
   }
 ];
+
+// Where things are in the app, for the assistant (not shown on the FAQ page)
+const EMPLOYEE_APP_GUIDE = [
+  'Menu: Dashboard, Timesheet, Time Off, Reminders, FAQ. Profile opens from your name at the bottom of the menu; Sign Out is below it.',
+  'Dashboard: Clock In card (Clock In, Break / Resume, Clock Out, location status), Planned Hours, Worked Hours (today and sessions), upcoming holidays and time off, Activities chart.',
+  'Timesheet: Daily, Weekly, Monthly and All Records views. Click a day to see its work and break timeline. Read only for employees.',
+  'Time Off: summary of pending, taken this year and next time off; request form with type, dates and reason; "Describe it instead" to fill the form from a sentence; your requests grouped as Pending, Upcoming and History, pending ones can be cancelled.',
+  'Reminders: automatic break, clock out and auto clock out reminders; optional desktop notifications, weekly summary email and missed clock-in reminder.',
+  'Profile: photo, name, phone number, Change Password. Email and department are set by the admin.',
+  'Admins approve new accounts, review unauthorised clock-ins, correct timesheets and approve time off.'
+].join('\n');
 
 const EMPLOYEE_FAQ_TEXT = EMPLOYEE_FAQ_ITEMS.map(item => `- ${item.q} ${item.a}`).join('\n');
 
@@ -1211,7 +1247,7 @@ function Dashboard({ user, onLogout }) {
     const stats = getActivitiesStats();
     const pendingCount = timeOffRequests.filter(t => t.status === 'pending').length;
     return {
-      faq: EMPLOYEE_FAQ_TEXT,
+      faq: `${EMPLOYEE_FAQ_TEXT}\n\nApp guide:\n${EMPLOYEE_APP_GUIDE}`,
       employeeData: `Name: ${getUsername()}. Currently: ${getStatus().text}. ` +
         `Hours worked today: ${Math.floor(stats.workedSeconds / 3600)}h ${Math.floor((stats.workedSeconds % 3600) / 60)}m. ` +
         `Pending time off requests: ${pendingCount}. Country: ${getUserCountry()}.`
@@ -1914,10 +1950,10 @@ function Dashboard({ user, onLogout }) {
 
                   {showQuickFill && (
                     <div className="to-describe">
-                      <input
-                        type="text"
+                      <AutoTextarea
                         placeholder="Next Friday off for a doctor's appointment"
                         value={quickTimeOffText}
+                        maxRows={4}
                         onChange={e => setQuickTimeOffText(e.target.value)}
                       />
                       <button

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { callAI } from '../lib/ai';
 import { HelpIcon, XIcon } from '../icons';
+import AutoTextarea from './AutoTextarea';
 import './AIChatWidget.css';
 
 // Floating support chat on the employee dashboard, available from any tab.
@@ -71,10 +72,11 @@ function AIChatWidget({ context }) {
           </div>
           {error && <p className="ai-chat-error">{error}</p>}
           <div className="ai-chat-input-row">
-            <input
-              type="text"
+            {/* Enter sends, Shift+Enter for a new line */}
+            <AutoTextarea
               placeholder="Ask a question..."
               value={input}
+              maxRows={5}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
             />

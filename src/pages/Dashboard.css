@@ -1833,8 +1833,10 @@
   border-radius: var(--radius-sm);
 }
 
-.to-describe input {
-  flex: 1;
+.to-describe textarea {
+  flex: 1 1 220px;
+  line-height: 1.45;
+  resize: none;
   min-width: 0;
   padding: 9px 12px;
   border: 1px solid var(--gray-300);
@@ -1845,7 +1847,7 @@
   background: #FFFFFF;
 }
 
-.to-describe input:focus {
+.to-describe textarea:focus {
   border-color: var(--blue);
   outline: none;
 }
@@ -1960,7 +1962,7 @@
   color: var(--white);
 }
 
-.dashboard-layout.dark .to-describe input {
+.dashboard-layout.dark .to-describe textarea {
   background: rgba(248, 250, 252, 0.06);
   border-color: rgba(248, 250, 252, 0.15);
   color: var(--white);
