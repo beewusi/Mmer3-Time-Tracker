@@ -1407,12 +1407,23 @@ function AdminDashboard({ user, onLogout }) {
       <div className={`admin-sidebar ${isNavOpen ? 'nav-open' : ''} ${isSidebarCollapsed ? 'is-collapsed' : ''}`}>
         <div className="sidebar-top">
           <div>
-            <div className="admin-brand">
-              <HourglassIcon width={20} height={20} />
+            <div
+              className="admin-brand"
+              onClick={isSidebarCollapsed ? () => setIsSidebarCollapsed(false) : undefined}
+              title={isSidebarCollapsed ? 'Expand sidebar' : undefined}>
+              <HourglassIcon width={20} height={20} className="brand-logo" />
+              <PanelLeftIcon width={18} height={18} className="brand-expand" />
               <span className="brand-name">Mmerℇ</span>
             </div>
             <div className="admin-label">Admin panel</div>
           </div>
+          <button
+            className="sidebar-collapse-btn"
+            onClick={() => setIsSidebarCollapsed(true)}
+            title="Collapse sidebar"
+            aria-label="Collapse sidebar">
+            <PanelLeftIcon width={17} height={17} />
+          </button>
           <button
             className="sidebar-menu-toggle"
             onClick={() => setIsNavOpen(prev => !prev)}
@@ -1464,14 +1475,6 @@ function AdminDashboard({ user, onLogout }) {
               <SettingsIcon width={17} height={17} /> <span className="nav-label">Settings</span>
             </button>
           </nav>
-
-          <button
-            className="admin-nav-item sidebar-collapse-btn"
-            onClick={() => setIsSidebarCollapsed(prev => !prev)}
-            title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
-            <PanelLeftIcon width={17} height={17} /> <span className="nav-label">Collapse</span>
-          </button>
 
           <div className="admin-user">
             <div className="admin-avatar">A</div>

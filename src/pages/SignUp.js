@@ -5,7 +5,7 @@ import PasswordInput from '../components/PasswordInput';
 import { AuthDivider, GoogleButton } from '../components/SocialAuth';
 import './SignUp.css';
 
-function SignUp({ onGoToLogin }) {
+function SignUp({ onGoToLogin, onOpenLegal }) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -13,6 +13,7 @@ function SignUp({ onGoToLogin }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [agreed, setAgreed] = useState(false);
 
   async function handleSignUp() {
     if (!fullName || !email || !password || !confirmPassword) {
@@ -30,6 +31,11 @@ function SignUp({ onGoToLogin }) {
       return;
     }
 
+    if (!agreed) {
+      setError('Please agree to the Terms of Use and Privacy Notice.');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -38,7 +44,9 @@ function SignUp({ onGoToLogin }) {
       password: password,
       options: {
         data: {
-          full_name: fullName
+          full_name: fullName,
+          // when they ticked the terms box
+          terms_accepted_at: new Date().toISOString()
         }
       }
     });
@@ -60,6 +68,7 @@ function SignUp({ onGoToLogin }) {
   }
 
   function handleGoogleSignUp() {
+    if (!agreed) return;
     supabase.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin }
@@ -120,15 +129,29 @@ function SignUp({ onGoToLogin }) {
             onChange={e => setConfirmPassword(e.target.value)}
           />
 
+          <label className="auth-terms">
+            <input
+              type="checkbox"
+              checked={agreed}
+              onChange={e => setAgreed(e.target.checked)}
+            />
+            <span>
+              I agree to the{' '}
+              <button type="button" className="auth-inline-link" onClick={() => onOpenLegal?.('terms')}>Terms of Use</button>
+              {' '}and{' '}
+              <button type="button" className="auth-inline-link" onClick={() => onOpenLegal?.('privacy')}>Privacy Notice</button>
+            </span>
+          </label>
+
           <button
             className="btn-primary signup-btn"
             onClick={handleSignUp}
-            disabled={loading}>
+            disabled={loading || !agreed}>
             {loading ? 'Creating account...' : 'Create Account'}
           </button>
 
           <AuthDivider />
-          <GoogleButton onClick={handleGoogleSignUp} label="Sign up with Google" />
+          <GoogleButton onClick={handleGoogleSignUp} label="Sign up with Google" disabled={!agreed} />
 
           <p className="auth-switch-link">
             Already have an account?{' '}

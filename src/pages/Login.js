@@ -5,7 +5,7 @@ import PasswordInput from '../components/PasswordInput';
 import { AuthDivider, GoogleButton } from '../components/SocialAuth';
 import './Login.css';
 
-function Login({ onLogin, onGoToSignUp }) {
+function Login({ onLogin, onGoToSignUp, onOpenLegal }) {
   const [mode, setMode] = useState('login'); // 'login' | 'forgot'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -130,6 +130,13 @@ function Login({ onLogin, onGoToSignUp }) {
               <p className="auth-switch-link">
                 Don't have an account?{' '}
                 <span onClick={onGoToSignUp}>Sign Up</span>
+              </p>
+
+              <p className="auth-legal-note">
+                By signing in, you agree to our{' '}
+                <button type="button" className="auth-inline-link" onClick={() => onOpenLegal?.('terms')}>Terms of Use</button>
+                {' '}and{' '}
+                <button type="button" className="auth-inline-link" onClick={() => onOpenLegal?.('privacy')}>Privacy Notice</button>.
               </p>
             </>
           )}

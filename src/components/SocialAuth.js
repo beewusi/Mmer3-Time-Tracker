@@ -8,9 +8,9 @@ export function AuthDivider() {
   );
 }
 
-export function GoogleButton({ onClick, label = 'Continue with Google' }) {
+export function GoogleButton({ onClick, label = 'Continue with Google', disabled = false }) {
   return (
-    <button type="button" className="social-btn" onClick={onClick}>
+    <button type="button" className="social-btn" onClick={onClick} disabled={disabled}>
       <GoogleIcon />
       <span>{label}</span>
     </button>

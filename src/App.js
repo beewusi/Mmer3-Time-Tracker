@@ -3,6 +3,7 @@ import { supabase, ADMIN_EMAIL } from './supabase';
 import Login from './pages/Login';
 import SignUp from './pages/SignUp';
 import ResetPassword from './pages/ResetPassword';
+import Legal from './pages/Legal';
 import PendingApproval from './pages/PendingApproval';
 import Dashboard from './pages/Dashboard';
 import AdminDashboard from './pages/AdminDashboard';
@@ -13,6 +14,8 @@ function App() {
   const [page, setPage] = useState('login');
   const [pendingStatus, setPendingStatus] = useState('pending');
   const [loading, setLoading] = useState(true);
+  // Privacy / Terms open on top of sign in or sign up, so the form keeps what's typed
+  const [legalDoc, setLegalDoc] = useState(null);
   // Opened from a password reset link. Stays on the set new password screen
   // until it's saved, even though Supabase has already signed them in.
   const recoveryRef = useRef(/type=recovery/.test(window.location.hash + window.location.search));
@@ -121,8 +124,14 @@ function App() {
 
   return (
     <>
+      {legalDoc && (page === 'login' || page === 'signup') && (
+        <div className="legal-overlay">
+          <Legal doc={legalDoc} onBack={() => setLegalDoc(null)} onSwitch={setLegalDoc} />
+        </div>
+      )}
+
       {page === 'signup' && (
-        <SignUp onGoToLogin={() => setPage('login')} />
+        <SignUp onGoToLogin={() => setPage('login')} onOpenLegal={setLegalDoc} />
       )}
 
       {page === 'login' && (
@@ -132,6 +141,7 @@ function App() {
             setPage(await resolvePageForUser(loggedInUser));
           }}
           onGoToSignUp={() => setPage('signup')}
+          onOpenLegal={setLegalDoc}
         />
       )}
 
