@@ -11,9 +11,10 @@ import './AdminDashboard.css';
 import {
   HourglassIcon, UsersIcon, RefreshIcon, LogoutIcon, TimesheetIcon,
   SuitcaseIcon, ClockIcon, CoffeeIcon, CheckCircleIcon, XIcon,
-  SettingsIcon, PinIcon, UserIcon, MoonIcon, SunIcon, MenuIcon, PanelLeftIcon
+  SettingsIcon, PinIcon, UserIcon, MenuIcon, PanelLeftIcon
 } from '../icons';
 import { loadPref, savePref } from '../lib/prefs';
+import ThemeToggle from '../components/ThemeToggle';
 
 // Starter departments for the picker.
 const DEFAULT_DEPARTMENT_SUGGESTIONS = ['Operations', 'Finance', 'Human Resources', 'Sales', 'Engineering'];
@@ -783,6 +784,16 @@ function AdminDashboard({ user, onLogout }) {
     );
   }
 
+  // top right of every tab: refresh (where there's data) + light/dark
+  function renderHeaderActions(showRefresh = true) {
+    return (
+      <div className="admin-header-actions">
+        {showRefresh && renderRefreshButton()}
+        <ThemeToggle isDarkMode={isDarkMode} onToggle={() => setIsDarkMode(prev => !prev)} />
+      </div>
+    );
+  }
+
   // Day click on the calendar/week: scroll down to that day's entries.
   function selectTimesheetDay(day) {
     scrollToDetailRef.current = true;
@@ -1489,14 +1500,6 @@ function AdminDashboard({ user, onLogout }) {
             </div>
           </div>
 
-          <button
-            className="dark-mode-toggle admin-dark-toggle"
-            onClick={() => setIsDarkMode(prev => !prev)}
-            title={isSidebarCollapsed ? (isDarkMode ? 'Light mode' : 'Dark mode') : undefined}>
-            {isDarkMode ? <SunIcon width={16} height={16} /> : <MoonIcon width={16} height={16} />}
-            <span className="nav-label">{isDarkMode ? 'Light' : 'Dark'}</span>
-          </button>
-
           <button className="admin-signout" onClick={onLogout} title={isSidebarCollapsed ? 'Sign Out' : undefined}>
             <LogoutIcon width={15} height={15} /> <span className="nav-label">Sign Out</span>
           </button>
@@ -1514,7 +1517,7 @@ function AdminDashboard({ user, onLogout }) {
                 <h1>Sign-Up Approvals</h1>
                 <p className="admin-date">Set a department and approve new accounts, or reject them</p>
               </div>
-              {renderRefreshButton()}
+              {renderHeaderActions()}
             </div>
 
             {approvalsError && <p className="admin-confirm-error">{approvalsError}</p>}
@@ -1611,7 +1614,7 @@ function AdminDashboard({ user, onLogout }) {
                 <h1>Admin Dashboard</h1>
                 <p className="admin-date">{getCurrentDate()}</p>
               </div>
-              {renderRefreshButton()}
+              {renderHeaderActions()}
             </div>
 
             {/* Stats Row */}
@@ -1742,7 +1745,7 @@ function AdminDashboard({ user, onLogout }) {
                 <h1>Timesheets</h1>
                 <p className="admin-date">Pick an employee, browse their calendar, review unauthorised clock-ins and approve completed months</p>
               </div>
-              {renderRefreshButton()}
+              {renderHeaderActions()}
             </div>
 
             {loading ? (
@@ -2014,7 +2017,7 @@ function AdminDashboard({ user, onLogout }) {
                 <h1>Time Off</h1>
                 <p className="admin-date">Approve or reject requests from your team</p>
               </div>
-              {renderRefreshButton()}
+              {renderHeaderActions()}
             </div>
 
             {selectedTimeOffIds.length > 0 && (
@@ -2107,6 +2110,7 @@ function AdminDashboard({ user, onLogout }) {
                 <h1>Settings</h1>
                 <p className="admin-date">Admin-only preferences</p>
               </div>
+              {renderHeaderActions(false)}
             </div>
 
             <div className="reminders-list">

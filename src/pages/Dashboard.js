@@ -13,10 +13,11 @@ import Profile from './Profile';
 import AIChatWidget from '../components/AIChatWidget';
 import SessionTimeline from '../components/SessionTimeline';
 import AutoTextarea from '../components/AutoTextarea';
+import ThemeToggle from '../components/ThemeToggle';
 import { PieChart, Pie, Cell, Tooltip } from 'recharts';
 import {
   HourglassIcon, DashboardIcon, TimesheetIcon, BellIcon,
-  ClockIcon, CoffeeIcon, CalendarIcon, PinIcon, MoonIcon, SunIcon,
+  ClockIcon, CoffeeIcon, CalendarIcon, PinIcon,
   ChevronDownIcon, SuitcaseIcon, AlertIcon, RefreshIcon, HelpIcon, CheckCircleIcon,
   MenuIcon, XIcon, PanelLeftIcon, LogoutIcon
 } from '../icons';
@@ -1445,12 +1446,7 @@ function Dashboard({ user, onLogout }) {
                 </div>
               </div>
               <div className="header-right">
-                <button
-                  className="dark-mode-toggle"
-                  onClick={() => setIsDarkMode(prev => !prev)}>
-                  {isDarkMode ? <SunIcon width={16} height={16} /> : <MoonIcon width={16} height={16} />}
-                  {isDarkMode ? 'Light' : 'Dark'}
-                </button>
+                <ThemeToggle isDarkMode={isDarkMode} onToggle={() => setIsDarkMode(prev => !prev)} />
               </div>
             </div>
 

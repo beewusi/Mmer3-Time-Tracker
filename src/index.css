@@ -312,8 +312,7 @@ input:focus-visible,
   }
 
   .is-collapsed .sidebar-signout,
-  .is-collapsed .admin-signout,
-  .is-collapsed .admin-dark-toggle {
+  .is-collapsed .admin-signout {
     padding: 9px 0;
   }
 
@@ -337,6 +336,63 @@ input:focus-visible,
   .sidebar-expand-btn {
     display: none;
   }
+}
+
+/* ---------- Light / dark switch ---------- */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  padding: 0;
+  background: #FFFFFF;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-sm);
+  color: var(--navy-700);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.2s ease, color 0.2s ease, transform 0.1s ease;
+}
+
+.theme-toggle:hover {
+  border-color: var(--gray-400);
+}
+
+.theme-toggle:active {
+  transform: scale(0.92);
+}
+
+.theme-toggle-icon {
+  display: flex;
+  animation: theme-icon-in 0.35s ease;
+}
+
+@keyframes theme-icon-in {
+  from { transform: rotate(-90deg) scale(0.5); opacity: 0; }
+  to { transform: rotate(0) scale(1); opacity: 1; }
+}
+
+.dark .theme-toggle {
+  background: var(--navy-700);
+  border-color: rgba(248, 250, 252, 0.15);
+  color: #FBBF24;
+}
+
+.dark .theme-toggle:hover {
+  border-color: var(--gray-400);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme-toggle-icon {
+    animation: none;
+  }
+}
+
+.admin-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* ---------- Refresh buttons ---------- */

@@ -135,26 +135,6 @@
   color: var(--white);
 }
 
-.admin-dark-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  background: transparent;
-  border: 1px solid rgba(248, 250, 252, 0.15);
-  color: var(--gray-300);
-  padding: 9px 12px;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.admin-dark-toggle:hover {
-  border-color: var(--gray-300);
-  color: var(--white);
-}
-
 /* ---------- Main ---------- */
 .admin-main {
   flex: 1;
