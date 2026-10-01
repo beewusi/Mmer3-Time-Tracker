@@ -4,14 +4,15 @@
 // supabase.functions.invoke('ai-assist', { body: { task, ...payload } }) so
 // the API key stays server-side.
 //
-// Gemini API (gemini-2.5-flash), free tier.
-//
-// Deploy:  supabase functions deploy ai-assist
-// Get a key: https://aistudio.google.com/app/apikey
-// Set key: supabase secrets set GEMINI_API_KEY=AIza...
+// Gemini API. Key from aistudio.google.com, stored as the GEMINI_API_KEY
+// secret in Supabase. GEMINI_MODEL secret overrides the model if Google
+// retires this one.
+// Only signed-in users can call it (checked below).
+
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-const MODEL = 'gemini-2.5-flash';
+const MODEL = Deno.env.get('GEMINI_MODEL') || 'gemini-3.5-flash-lite';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -26,15 +27,15 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 async function callGemini(system: string, userMessage: string, maxTokens = 400) {
-  // New "AQ..." keys have to go in the Authorization header. Sending them as
-  // ?key= gave 401s.
+  // API keys go in x-goog-api-key. Bearer only takes Google sign-in tokens
+  // (that's the "Expected OAuth 2 access token" 401).
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      'Authorization': `Bearer ${GEMINI_API_KEY}`
+      'x-goog-api-key': GEMINI_API_KEY ?? ''
     },
     body: JSON.stringify({
       system_instruction: { parts: [{ text: system }] },
@@ -79,9 +80,20 @@ Deno.serve(async (req: Request) => {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // signed-in users only, the public anon key on its own isn't enough
+  const authClient = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+    { global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } } }
+  );
+  const { data: { user } } = await authClient.auth.getUser();
+  if (!user) {
+    return jsonResponse({ error: 'Please sign in to use the assistant.' }, 401);
+  }
+
   try {
     if (!GEMINI_API_KEY) {
-      throw new Error('GEMINI_API_KEY is not set. Run: supabase secrets set GEMINI_API_KEY=AIza...');
+      throw new Error('The assistant isn\'t set up yet (GEMINI_API_KEY missing).');
     }
 
     const body = await req.json();
