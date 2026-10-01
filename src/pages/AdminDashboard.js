@@ -11,8 +11,9 @@ import './AdminDashboard.css';
 import {
   HourglassIcon, UsersIcon, RefreshIcon, LogoutIcon, TimesheetIcon,
   SuitcaseIcon, ClockIcon, CoffeeIcon, CheckCircleIcon, XIcon,
-  SettingsIcon, PinIcon, UserIcon, MoonIcon, SunIcon, MenuIcon
+  SettingsIcon, PinIcon, UserIcon, MoonIcon, SunIcon, MenuIcon, PanelLeftIcon
 } from '../icons';
+import { loadPref, savePref } from '../lib/prefs';
 
 // Starter departments for the picker.
 const DEFAULT_DEPARTMENT_SUGGESTIONS = ['Operations', 'Finance', 'Human Resources', 'Sales', 'Engineering'];
@@ -28,6 +29,9 @@ function locationLabel(status) {
 function isCounted(record) {
   return record.location_status !== 'declined';
 }
+
+// tooltip text for the collapsed sidebar
+const NAV_TITLES = { employees: 'Employees', approvals: 'Approvals', timesheets: 'Timesheets', timeoff: 'Time Off', settings: 'Settings' };
 
 function AdminDashboard({ user, onLogout }) {
   const [employees, setEmployees] = useState([]);
@@ -74,9 +78,10 @@ function AdminDashboard({ user, onLogout }) {
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const [anomalyNotes, setAnomalyNotes] = useState({});
   const [anomalyLoadingId, setAnomalyLoadingId] = useState(null);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => loadPref('adminDark', false));
   const [liveTick, setLiveTick] = useState(Date.now());
   const [isNavOpen, setIsNavOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => loadPref('adminSidebarCollapsed', false));
   const [locationSavingId, setLocationSavingId] = useState(null);
   const [refreshState, setRefreshState] = useState('idle');
   const [breaks, setBreaks] = useState([]);
@@ -1155,6 +1160,10 @@ function AdminDashboard({ user, onLogout }) {
   }
 
   // Close the mobile menu after picking a tab.
+  // remembered per browser
+  useEffect(() => { savePref('adminDark', isDarkMode); }, [isDarkMode]);
+  useEffect(() => { savePref('adminSidebarCollapsed', isSidebarCollapsed); }, [isSidebarCollapsed]);
+
   function goToTab(tab) {
     setActiveTab(tab);
     setIsNavOpen(false);
@@ -1395,7 +1404,7 @@ function AdminDashboard({ user, onLogout }) {
 
       {/* Sidebar (top bar + menu button on smaller screens) */}
       {isNavOpen && <div className="sidebar-backdrop" onClick={() => setIsNavOpen(false)} />}
-      <div className={`admin-sidebar ${isNavOpen ? 'nav-open' : ''}`}>
+      <div className={`admin-sidebar ${isNavOpen ? 'nav-open' : ''} ${isSidebarCollapsed ? 'is-collapsed' : ''}`}>
         <div className="sidebar-top">
           <div>
             <div className="admin-brand">
@@ -1417,13 +1426,15 @@ function AdminDashboard({ user, onLogout }) {
           <nav className="admin-nav">
             <button
               className={`admin-nav-item ${activeTab === 'employees' ? 'active' : ''}`}
-              onClick={() => goToTab('employees')}>
-              <UsersIcon width={17} height={17} /> Employees
+              onClick={() => goToTab('employees')}
+              title={isSidebarCollapsed ? NAV_TITLES.employees : undefined}>
+              <UsersIcon width={17} height={17} /> <span className="nav-label">Employees</span>
             </button>
             <button
               className={`admin-nav-item ${activeTab === 'approvals' ? 'active' : ''}`}
-              onClick={() => goToTab('approvals')}>
-              <UserIcon width={17} height={17} /> Approvals
+              onClick={() => goToTab('approvals')}
+              title={isSidebarCollapsed ? NAV_TITLES.approvals : undefined}>
+              <UserIcon width={17} height={17} /> <span className="nav-label">Approvals</span>
               {pendingUsers.length > 0 && (
                 <span className="admin-nav-badge">{pendingUsers.length}</span>
               )}
@@ -1431,26 +1442,36 @@ function AdminDashboard({ user, onLogout }) {
             <button
               className={`admin-nav-item ${activeTab === 'timesheets' ? 'active' : ''}`}
               onClick={() => goToTab('timesheets')}
-              title={adminSettings.locationAlerts && getTotalUnreviewed() > 0 ? 'Clock-ins from an unauthorised location waiting for review' : undefined}>
-              <TimesheetIcon width={17} height={17} /> Timesheets
+              title={adminSettings.locationAlerts && getTotalUnreviewed() > 0 ? 'Clock-ins from an unauthorised location waiting for review' : (isSidebarCollapsed ? 'Timesheets' : undefined)}>
+              <TimesheetIcon width={17} height={17} /> <span className="nav-label">Timesheets</span>
               {adminSettings.locationAlerts && getTotalUnreviewed() > 0 && (
                 <span className="admin-nav-badge">{getTotalUnreviewed()}</span>
               )}
             </button>
             <button
               className={`admin-nav-item ${activeTab === 'timeoff' ? 'active' : ''}`}
-              onClick={() => goToTab('timeoff')}>
-              <SuitcaseIcon width={17} height={17} /> Time Off
+              onClick={() => goToTab('timeoff')}
+              title={isSidebarCollapsed ? NAV_TITLES.timeoff : undefined}>
+              <SuitcaseIcon width={17} height={17} /> <span className="nav-label">Time Off</span>
               {pendingTimeOffIds().length > 0 && (
                 <span className="admin-nav-badge">{pendingTimeOffIds().length}</span>
               )}
             </button>
             <button
               className={`admin-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
-              onClick={() => goToTab('settings')}>
-              <SettingsIcon width={17} height={17} /> Settings
+              onClick={() => goToTab('settings')}
+              title={isSidebarCollapsed ? NAV_TITLES.settings : undefined}>
+              <SettingsIcon width={17} height={17} /> <span className="nav-label">Settings</span>
             </button>
           </nav>
+
+          <button
+            className="admin-nav-item sidebar-collapse-btn"
+            onClick={() => setIsSidebarCollapsed(prev => !prev)}
+            title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+            <PanelLeftIcon width={17} height={17} /> <span className="nav-label">Collapse</span>
+          </button>
 
           <div className="admin-user">
             <div className="admin-avatar">A</div>
@@ -1462,13 +1483,14 @@ function AdminDashboard({ user, onLogout }) {
 
           <button
             className="dark-mode-toggle admin-dark-toggle"
-            onClick={() => setIsDarkMode(prev => !prev)}>
+            onClick={() => setIsDarkMode(prev => !prev)}
+            title={isSidebarCollapsed ? (isDarkMode ? 'Light mode' : 'Dark mode') : undefined}>
             {isDarkMode ? <SunIcon width={16} height={16} /> : <MoonIcon width={16} height={16} />}
-            {isDarkMode ? 'Light' : 'Dark'}
+            <span className="nav-label">{isDarkMode ? 'Light' : 'Dark'}</span>
           </button>
 
-          <button className="admin-signout" onClick={onLogout}>
-            <LogoutIcon width={15} height={15} /> Sign Out
+          <button className="admin-signout" onClick={onLogout} title={isSidebarCollapsed ? 'Sign Out' : undefined}>
+            <LogoutIcon width={15} height={15} /> <span className="nav-label">Sign Out</span>
           </button>
         </div>
       </div>

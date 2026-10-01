@@ -17,8 +17,9 @@ import {
   HourglassIcon, DashboardIcon, TimesheetIcon, BellIcon,
   ClockIcon, CoffeeIcon, CalendarIcon, PinIcon, MoonIcon, SunIcon,
   ChevronDownIcon, SuitcaseIcon, AlertIcon, RefreshIcon, HelpIcon, CheckCircleIcon,
-  MenuIcon, XIcon
+  MenuIcon, XIcon, PanelLeftIcon, LogoutIcon
 } from '../icons';
+import { loadPref, savePref } from '../lib/prefs';
 
 const TIME_OFF_TYPES = ['Annual Leave', 'Sick Leave', 'Unpaid Leave', 'Emergency Leave', 'Compassionate Leave'];
 
@@ -81,6 +82,9 @@ function isCounted(record) {
   return record.location_status !== 'declined';
 }
 
+// tooltip text for the collapsed sidebar
+const NAV_TITLES = { dashboard: 'Dashboard', timesheet: 'Timesheet', timeoff: 'Time Off', reminders: 'Reminders', faq: 'FAQ' };
+
 function Dashboard({ user, onLogout }) {
   const [profile, setProfile] = useState(null);
   const [isClockedIn, setIsClockedIn] = useState(false);
@@ -118,11 +122,12 @@ function Dashboard({ user, onLogout }) {
   });
   const [timesheetSelectedDate, setTimesheetSelectedDate] = useState(null);
   const [activitiesFilter, setActivitiesFilter] = useState('daily');
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(() => loadPref('employeeDark', false));
   const [locationStatus, setLocationStatus] = useState(null);
   const [locationName, setLocationName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [isNavOpen, setIsNavOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => loadPref('employeeSidebarCollapsed', false));
   const [openFaqIndex, setOpenFaqIndex] = useState(null);
   const [timeOffRefreshState, setTimeOffRefreshState] = useState('idle');
   const dayDetailRef = useRef(null);
@@ -164,7 +169,10 @@ function Dashboard({ user, onLogout }) {
 
   const OFFICE_LAT = 5.5965681;
   const OFFICE_LNG = -0.2240833;
-  const ALLOWED_RADIUS_METERS = 200;
+  // 50m from the office. GPS can be a few metres off indoors, so the reading's
+  // own accuracy is allowed for, capped at 25m so a rough fix can't pass.
+  const ALLOWED_RADIUS_METERS = 50;
+  const MAX_ACCURACY_ALLOWANCE = 25;
 
   function getCurrentTime() {
     return new Date().toLocaleTimeString([], {
@@ -500,9 +508,10 @@ function Dashboard({ user, onLogout }) {
       }
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          const { latitude, longitude } = position.coords;
+          const { latitude, longitude, accuracy } = position.coords;
           const distance = getDistanceMeters(latitude, longitude, OFFICE_LAT, OFFICE_LNG);
-          const result = distance <= ALLOWED_RADIUS_METERS ? 'authorised' : 'unauthorised';
+          const allowance = Math.min(accuracy || 0, MAX_ACCURACY_ALLOWANCE);
+          const result = distance - allowance <= ALLOWED_RADIUS_METERS ? 'authorised' : 'unauthorised';
           applyLocationStatus(result);
           resolve(result);
         },
@@ -1264,6 +1273,10 @@ function Dashboard({ user, onLogout }) {
   }, [timesheetSelectedDate]);
 
   // Close the mobile menu after picking a page.
+  // remembered per browser
+  useEffect(() => { savePref('employeeDark', isDarkMode); }, [isDarkMode]);
+  useEffect(() => { savePref('employeeSidebarCollapsed', isSidebarCollapsed); }, [isSidebarCollapsed]);
+
   function goToPage(page) {
     setActivePage(page);
     setIsNavOpen(false);
@@ -1292,7 +1305,7 @@ function Dashboard({ user, onLogout }) {
 
       {/* Sidebar (top bar + menu button on smaller screens) */}
       {isNavOpen && <div className="sidebar-backdrop" onClick={() => setIsNavOpen(false)} />}
-      <div className={`sidebar ${isNavOpen ? 'nav-open' : ''}`}>
+      <div className={`sidebar ${isNavOpen ? 'nav-open' : ''} ${isSidebarCollapsed ? 'is-collapsed' : ''}`}>
         <div className="sidebar-top">
           <div className="sidebar-brand">
             <HourglassIcon width={20} height={20} />
@@ -1310,30 +1323,42 @@ function Dashboard({ user, onLogout }) {
           <nav className="sidebar-nav">
             <button
               className={`nav-item ${activePage === 'dashboard' ? 'active' : ''}`}
-              onClick={() => goToPage('dashboard')}>
-              <DashboardIcon width={17} height={17} /> Dashboard
+              onClick={() => goToPage('dashboard')}
+              title={isSidebarCollapsed ? NAV_TITLES.dashboard : undefined}>
+              <DashboardIcon width={17} height={17} /> <span className="nav-label">Dashboard</span>
             </button>
             <button
               className={`nav-item ${activePage === 'timesheet' ? 'active' : ''}`}
-              onClick={() => goToPage('timesheet')}>
-              <TimesheetIcon width={17} height={17} /> Timesheet
+              onClick={() => goToPage('timesheet')}
+              title={isSidebarCollapsed ? NAV_TITLES.timesheet : undefined}>
+              <TimesheetIcon width={17} height={17} /> <span className="nav-label">Timesheet</span>
             </button>
             <button
               className={`nav-item ${activePage === 'timeoff' ? 'active' : ''}`}
-              onClick={() => goToPage('timeoff')}>
-              <SuitcaseIcon width={17} height={17} /> Time Off
+              onClick={() => goToPage('timeoff')}
+              title={isSidebarCollapsed ? NAV_TITLES.timeoff : undefined}>
+              <SuitcaseIcon width={17} height={17} /> <span className="nav-label">Time Off</span>
             </button>
             <button
               className={`nav-item ${activePage === 'reminders' ? 'active' : ''}`}
-              onClick={() => goToPage('reminders')}>
-              <BellIcon width={17} height={17} /> Reminders
+              onClick={() => goToPage('reminders')}
+              title={isSidebarCollapsed ? NAV_TITLES.reminders : undefined}>
+              <BellIcon width={17} height={17} /> <span className="nav-label">Reminders</span>
             </button>
             <button
               className={`nav-item ${activePage === 'faq' ? 'active' : ''}`}
-              onClick={() => goToPage('faq')}>
-              <HelpIcon width={17} height={17} /> FAQ
+              onClick={() => goToPage('faq')}
+              title={isSidebarCollapsed ? NAV_TITLES.faq : undefined}>
+              <HelpIcon width={17} height={17} /> <span className="nav-label">FAQ</span>
             </button>
           </nav>
+          <button
+            className="nav-item sidebar-collapse-btn"
+            onClick={() => setIsSidebarCollapsed(prev => !prev)}
+            title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+            <PanelLeftIcon width={17} height={17} /> <span className="nav-label">Collapse</span>
+          </button>
           <div
             className="sidebar-user"
             onClick={() => goToPage('profile')}
@@ -1348,7 +1373,9 @@ function Dashboard({ user, onLogout }) {
               <p className="user-role">View profile</p>
             </div>
           </div>
-          <button className="sidebar-signout" onClick={onLogout}>Sign Out</button>
+          <button className="sidebar-signout" onClick={onLogout} title={isSidebarCollapsed ? 'Sign Out' : undefined}>
+            <LogoutIcon width={15} height={15} /> <span className="nav-label">Sign Out</span>
+          </button>
         </div>
       </div>
 
@@ -1552,8 +1579,8 @@ function Dashboard({ user, onLogout }) {
                         dataKey="value"
                         startAngle={90}
                         endAngle={-270}>
-                        <Cell fill="#2563EB" />
-                        <Cell fill="#E2E8F0" />
+                        <Cell fill="#2563EB" stroke={isDarkMode ? '#1E293B' : '#FFFFFF'} />
+                        <Cell fill={isDarkMode ? '#334155' : '#E2E8F0'} stroke={isDarkMode ? '#1E293B' : '#FFFFFF'} />
                       </Pie>
                       <Tooltip
                         formatter={(value) => {
@@ -1581,7 +1608,7 @@ function Dashboard({ user, onLogout }) {
                       <span>Break time — {Math.floor(activityStats.breakSecondsVal / 3600)}h {Math.floor((activityStats.breakSecondsVal % 3600) / 60)}m</span>
                     </div>
                     <div className="legend-item">
-                      <span className="legend-dot" style={{backgroundColor: '#E2E8F0'}}></span>
+                      <span className="legend-dot" style={{backgroundColor: isDarkMode ? '#475569' : '#E2E8F0'}}></span>
                       <span>Remaining — {Math.floor(Math.max(activityStats.targetSeconds - activityStats.workedSeconds, 0) / 3600)}h {Math.floor((Math.max(activityStats.targetSeconds - activityStats.workedSeconds, 0) % 3600) / 60)}m</span>
                     </div>
                     <div className="legend-item">

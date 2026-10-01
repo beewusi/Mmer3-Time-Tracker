@@ -99,6 +99,97 @@ input:focus-visible,
 }
 
 
+/* ---------- Dark mode tokens (employee + admin) ---------- */
+/* Lighter text greys, brighter status colours and see-through status
+   backgrounds, so pills and muted text stay readable on navy. */
+.dashboard-layout.dark,
+.admin-layout.dark {
+  color-scheme: dark;
+  --gray-500: #94A3B8;
+  --gray-600: #CBD5E1;
+  --blue-50: rgba(59, 130, 246, 0.14);
+  --blue-100: rgba(59, 130, 246, 0.24);
+  --success: #4ADE80;
+  --success-bg: rgba(34, 197, 94, 0.14);
+  --warning: #FBBF24;
+  --warning-bg: rgba(245, 158, 11, 0.15);
+  --danger: #F87171;
+  --danger-bg: rgba(239, 68, 68, 0.15);
+  --link: #60A5FA;
+}
+
+/* Dark mode fixes shared by both dashboards */
+.admin-layout.dark {
+  background: var(--navy);
+}
+
+/* blue text: brighter blue on navy (buttons keep the brand blue) */
+.dark .admin-link-btn,
+.dark .st-link:not(.st-link-muted):not(.st-link-danger),
+.dark .to-describe-toggle,
+.dark .profile-dept,
+.dark .stat-leave,
+.dark .employee-avatar,
+.dark .holiday-tag-holiday,
+.dark .reminder-icon {
+  color: var(--link);
+}
+
+/* today / selected calendar cell */
+.dark .timesheet-day-hours,
+.dark .timesheet-day-cell.today .timesheet-day-number,
+.dark .timesheet-week-cell.today .timesheet-week-daynum {
+  color: var(--link);
+}
+
+/* admin stat numbers were navy on navy */
+.admin-layout.dark .admin-stat-value {
+  color: var(--white);
+}
+
+.admin-layout.dark .admin-stat-value.stat-neutral {
+  color: var(--gray-300);
+}
+
+.admin-layout.dark .admin-stat-label {
+  color: var(--gray-400);
+}
+
+/* grey pills */
+.dark .status-badge.status-muted,
+.dark .holiday-tag-taken {
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--gray-300);
+}
+
+/* initials circles were navy on navy */
+.dark .header-avatar,
+.dark .profile-avatar {
+  background: var(--blue);
+}
+
+/* admin Settings uses the employee reminder cards */
+.admin-layout.dark .reminder-item {
+  background: var(--navy-700);
+  border-color: rgba(248, 250, 252, 0.1);
+}
+
+.admin-layout.dark .reminder-info h3 {
+  color: var(--white);
+}
+
+.admin-layout.dark .reminder-info p {
+  color: var(--gray-400);
+}
+
+.admin-layout.dark .timeoff-admin-header-row {
+  border-bottom-color: rgba(248, 250, 252, 0.08);
+}
+
+.admin-layout.dark .timeoff-select-all {
+  color: var(--gray-300);
+}
+
 /* ---------- Collapsible sidebar (shared by the employee and admin sidebars) ---------- */
 /* Menu button + backdrop only show below 900px (rules in Dashboard.css / AdminDashboard.css) */
 .sidebar-top {
@@ -137,6 +228,87 @@ input:focus-visible,
 
 .sidebar-backdrop {
   display: none;
+}
+
+/* Collapse button sits above the user block; desktop only */
+.sidebar-collapse-btn {
+  margin-top: var(--space-2);
+}
+
+.sidebar,
+.admin-sidebar {
+  transition: width 0.2s ease, padding 0.2s ease;
+}
+
+/* Collapsed: icon-only rail, names show as tooltips (title) */
+@media (min-width: 901px) {
+  .sidebar.is-collapsed,
+  .admin-sidebar.is-collapsed {
+    width: 72px;
+    padding-left: 12px;
+    padding-right: 12px;
+    overflow-x: hidden;
+  }
+
+  .is-collapsed .nav-label,
+  .is-collapsed .brand-name,
+  .is-collapsed .admin-label,
+  .is-collapsed .user-info,
+  .is-collapsed .admin-info {
+    display: none;
+  }
+
+  .is-collapsed .sidebar-brand,
+  .is-collapsed .admin-brand {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .is-collapsed .admin-brand {
+    margin-bottom: var(--space-4);
+  }
+
+  .is-collapsed .nav-item,
+  .is-collapsed .admin-nav-item {
+    justify-content: center;
+    padding: 10px 0;
+  }
+
+  .is-collapsed .sidebar-user,
+  .is-collapsed .admin-user {
+    justify-content: center;
+    padding: 10px 0;
+  }
+
+  .is-collapsed .sidebar-signout,
+  .is-collapsed .admin-signout,
+  .is-collapsed .admin-dark-toggle {
+    padding: 9px 0;
+  }
+
+  /* badge becomes a small count on the icon's corner */
+  .is-collapsed .admin-nav-item {
+    position: relative;
+  }
+
+  .is-collapsed .admin-nav-badge {
+    position: absolute;
+    top: 3px;
+    right: 6px;
+    margin: 0;
+    font-size: 9.5px;
+    padding: 2px 5px;
+  }
+
+  .is-collapsed .sidebar-collapse-btn svg {
+    transform: scaleX(-1);
+  }
+}
+
+@media (max-width: 900px) {
+  .sidebar-collapse-btn {
+    display: none !important;
+  }
 }
 
 /* ---------- Refresh buttons ---------- */
