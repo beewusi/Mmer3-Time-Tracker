@@ -1307,12 +1307,8 @@ function Dashboard({ user, onLogout }) {
       {isNavOpen && <div className="sidebar-backdrop" onClick={() => setIsNavOpen(false)} />}
       <div className={`sidebar ${isNavOpen ? 'nav-open' : ''} ${isSidebarCollapsed ? 'is-collapsed' : ''}`}>
         <div className="sidebar-top">
-          <div
-            className="sidebar-brand"
-            onClick={isSidebarCollapsed ? () => setIsSidebarCollapsed(false) : undefined}
-            title={isSidebarCollapsed ? 'Expand sidebar' : undefined}>
-            <HourglassIcon width={20} height={20} className="brand-logo" />
-            <PanelLeftIcon width={18} height={18} className="brand-expand" />
+          <div className="sidebar-brand">
+            <HourglassIcon width={20} height={20} />
             <span className="brand-name">Mmerℇ</span>
           </div>
           <button
@@ -1363,6 +1359,15 @@ function Dashboard({ user, onLogout }) {
               <HelpIcon width={17} height={17} /> <span className="nav-label">FAQ</span>
             </button>
           </nav>
+          {isSidebarCollapsed && (
+            <button
+              className="nav-item sidebar-expand-btn"
+              onClick={() => setIsSidebarCollapsed(false)}
+              title="Expand sidebar"
+              aria-label="Expand sidebar">
+              <PanelLeftIcon width={17} height={17} />
+            </button>
+          )}
           <div
             className="sidebar-user"
             onClick={() => goToPage('profile')}

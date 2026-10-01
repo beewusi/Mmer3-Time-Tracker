@@ -217,3 +217,30 @@ export const PanelLeftIcon = (props) => (
     <path d="M9.5 4v16" />
   </svg>
 );
+
+export const ShieldIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M12 3l7 3v5c0 4.5-3 8.3-7 10-4-1.7-7-5.5-7-10V6l7-3z" />
+    <path d="M9 12l2 2 4-4" />
+  </svg>
+);
+
+export const MailIcon = (props) => (
+  <svg {...base} {...props}>
+    <rect x="3" y="5" width="18" height="14" rx="2.5" />
+    <path d="M4 7l8 6 8-6" />
+  </svg>
+);
+
+export const FileTextIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5z" />
+    <path d="M14 3v5h5M9 13h6M9 17h6" />
+  </svg>
+);
+
+export const ArrowUpRightIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M7 17L17 7M8 7h9v9" />
+  </svg>
+);

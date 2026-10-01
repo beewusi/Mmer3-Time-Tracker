@@ -252,17 +252,13 @@ input:focus-visible,
   color: var(--white);
 }
 
-.brand-expand {
-  display: none;
-}
-
 .sidebar,
 .admin-sidebar {
   transition: width 0.2s ease, padding 0.2s ease;
 }
 
 /* Collapsed: narrow icon rail, names show as tooltips (title).
-   Logo sits in the middle and turns into the expand button on hover. */
+   Expand button moves down above the profile. */
 @media (min-width: 901px) {
   .sidebar.is-collapsed,
   .admin-sidebar.is-collapsed {
@@ -292,30 +288,15 @@ input:focus-visible,
   .is-collapsed .sidebar-brand,
   .is-collapsed .admin-brand {
     justify-content: center;
-    width: 100%;
-    height: 34px;
     padding: 0;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
   }
 
   .is-collapsed .admin-brand {
     margin-bottom: var(--space-5);
   }
 
-  .is-collapsed .sidebar-brand:hover,
-  .is-collapsed .admin-brand:hover {
-    background: rgba(248, 250, 252, 0.08);
-  }
-
-  .is-collapsed .sidebar-brand:hover .brand-logo,
-  .is-collapsed .admin-brand:hover .brand-logo {
-    display: none;
-  }
-
-  .is-collapsed .sidebar-brand:hover .brand-expand,
-  .is-collapsed .admin-brand:hover .brand-expand {
-    display: block;
+  .is-collapsed .sidebar-expand-btn {
+    margin-top: var(--space-2);
   }
 
   .is-collapsed .nav-item,
@@ -352,7 +333,8 @@ input:focus-visible,
 }
 
 @media (max-width: 900px) {
-  .sidebar-collapse-btn {
+  .sidebar-collapse-btn,
+  .sidebar-expand-btn {
     display: none;
   }
 }

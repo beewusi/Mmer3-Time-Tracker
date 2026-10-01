@@ -226,17 +226,15 @@
   cursor: pointer;
 }
 
-.auth-inline-link {
-  background: none;
-  border: none;
-  padding: 0;
-  font: inherit;
+.auth-terms a,
+.auth-legal-note a {
   color: var(--blue);
   font-weight: 600;
-  cursor: pointer;
+  text-decoration: none;
 }
 
-.auth-inline-link:hover {
+.auth-terms a:hover,
+.auth-legal-note a:hover {
   text-decoration: underline;
 }
 

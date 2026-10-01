@@ -5,7 +5,7 @@ import PasswordInput from '../components/PasswordInput';
 import { AuthDivider, GoogleButton } from '../components/SocialAuth';
 import './SignUp.css';
 
-function SignUp({ onGoToLogin, onOpenLegal }) {
+function SignUp({ onGoToLogin }) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -137,9 +137,9 @@ function SignUp({ onGoToLogin, onOpenLegal }) {
             />
             <span>
               I agree to the{' '}
-              <button type="button" className="auth-inline-link" onClick={() => onOpenLegal?.('terms')}>Terms of Use</button>
+              <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Use</a>
               {' '}and{' '}
-              <button type="button" className="auth-inline-link" onClick={() => onOpenLegal?.('privacy')}>Privacy Notice</button>
+              <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Notice</a>
             </span>
           </label>
 

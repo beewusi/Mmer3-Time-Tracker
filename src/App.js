@@ -9,13 +9,14 @@ import Dashboard from './pages/Dashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import { HourglassIcon } from './icons';
 
+// /privacy and /terms are public pages, opened in their own tab
+const LEGAL_PATH = window.location.pathname.replace(/\/+$/, '');
+
 function App() {
   const [user, setUser] = useState(null);
   const [page, setPage] = useState('login');
   const [pendingStatus, setPendingStatus] = useState('pending');
   const [loading, setLoading] = useState(true);
-  // Privacy / Terms open on top of sign in or sign up, so the form keeps what's typed
-  const [legalDoc, setLegalDoc] = useState(null);
   // Opened from a password reset link. Stays on the set new password screen
   // until it's saved, even though Supabase has already signed them in.
   const recoveryRef = useRef(/type=recovery/.test(window.location.hash + window.location.search));
@@ -113,6 +114,10 @@ function App() {
     setPage(await resolvePageForUser(user));
   }
 
+  if (LEGAL_PATH === '/privacy' || LEGAL_PATH === '/terms') {
+    return <Legal doc={LEGAL_PATH.slice(1)} />;
+  }
+
   if (loading) {
     return (
       <div className="app-loading">
@@ -124,14 +129,8 @@ function App() {
 
   return (
     <>
-      {legalDoc && (page === 'login' || page === 'signup') && (
-        <div className="legal-overlay">
-          <Legal doc={legalDoc} onBack={() => setLegalDoc(null)} onSwitch={setLegalDoc} />
-        </div>
-      )}
-
       {page === 'signup' && (
-        <SignUp onGoToLogin={() => setPage('login')} onOpenLegal={setLegalDoc} />
+        <SignUp onGoToLogin={() => setPage('login')} />
       )}
 
       {page === 'login' && (
@@ -141,7 +140,6 @@ function App() {
             setPage(await resolvePageForUser(loggedInUser));
           }}
           onGoToSignUp={() => setPage('signup')}
-          onOpenLegal={setLegalDoc}
         />
       )}
 
