@@ -5,12 +5,12 @@ import AutoTextarea from './AutoTextarea';
 import './AIChatWidget.css';
 
 // Floating support chat on the employee dashboard, available from any tab.
-// Answers only from the FAQ + the employee's own stats (buildChatContext() in
-// Dashboard.js).
+// App questions from the FAQ + the employee's own stats (buildChatContext() in
+// Dashboard.js); everyday questions answered too. Rules in ai-assist.
 function AIChatWidget({ context }) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: "Hi! I can help with clocking in/out, breaks, timesheets or time off. What's up?" }
+    { role: 'assistant', content: "Hi! Ask me anything about clocking in, breaks, your timesheet or time off, or just a quick question." }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);

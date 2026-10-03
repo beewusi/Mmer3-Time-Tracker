@@ -1,0 +1,727 @@
+/* Devices & Security, My Activity, and the admin Review / Devices / Activity
+   pages. Built on the reminder-item cards so they match the rest. */
+
+.sec-first-heading {
+  margin-top: 0;
+}
+
+.sec-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--blue-50);
+  color: var(--blue);
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: 1px;
+}
+
+.reminder-badge.sec-badge-active { background: var(--success-bg); color: var(--success); }
+.reminder-badge.sec-badge-pending { background: var(--warning-bg); color: var(--warning); }
+.reminder-badge.sec-badge-danger { background: var(--danger-bg); color: var(--danger); }
+.reminder-badge.sec-badge-neutral { background: var(--gray-100); color: var(--gray-500); }
+
+.reminder-badge {
+  white-space: nowrap;
+}
+
+.sec-action-item {
+  align-items: flex-start;
+}
+
+.sec-action-item .reminder-info p a {
+  color: var(--blue);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.sec-inline-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.sec-inline-form input[type="text"] {
+  flex: 1;
+  min-width: 160px;
+  max-width: 260px;
+  padding: 10px 12px;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  font-family: inherit;
+  color: var(--navy);
+  background: #FFFFFF;
+}
+
+.sec-inline-form .btn-primary {
+  width: auto;
+}
+
+.sec-btn-link {
+  border: none;
+  background: none;
+  padding: 6px 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-500);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sec-btn-link:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+.sec-btn-link:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.sec-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--navy-700);
+  cursor: pointer;
+}
+
+.sec-consent input {
+  margin-top: 3px;
+  accent-color: var(--blue);
+  flex-shrink: 0;
+}
+
+.sec-msg {
+  margin-top: var(--space-2);
+}
+
+.popup-buttons .popup-confirm.sec-danger {
+  background: var(--danger);
+}
+
+.sec-footnote {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--space-4);
+  font-size: 12.5px;
+  color: var(--gray-500);
+}
+
+/* ---------- dark ---------- */
+.dashboard-layout.dark .sec-tag,
+.admin-layout.dark .sec-tag {
+  background: rgba(37, 99, 235, 0.2);
+  color: #93C5FD;
+}
+
+.dashboard-layout.dark .sec-inline-form input[type="text"],
+.admin-layout.dark .sec-inline-form input[type="text"] {
+  background: rgba(248, 250, 252, 0.06);
+  border-color: rgba(248, 250, 252, 0.15);
+  color: var(--white);
+}
+
+.dashboard-layout.dark .sec-consent,
+.admin-layout.dark .sec-consent {
+  color: var(--gray-200);
+}
+
+.dashboard-layout.dark .reminder-badge.sec-badge-neutral,
+.admin-layout.dark .reminder-badge.sec-badge-neutral {
+  background: rgba(248, 250, 252, 0.08);
+  color: var(--gray-300);
+}
+
+.dashboard-layout.dark .reminder-badge.sec-badge-active,
+.admin-layout.dark .reminder-badge.sec-badge-active {
+  background: rgba(21, 128, 61, 0.2);
+  color: #4ADE80;
+}
+
+.dashboard-layout.dark .reminder-badge.sec-badge-pending,
+.admin-layout.dark .reminder-badge.sec-badge-pending {
+  background: rgba(180, 83, 9, 0.2);
+  color: #FBBF24;
+}
+
+.dashboard-layout.dark .reminder-badge.sec-badge-danger,
+.admin-layout.dark .reminder-badge.sec-badge-danger {
+  background: rgba(185, 28, 28, 0.2);
+  color: #F87171;
+}
+
+.dashboard-layout.dark .sec-footnote,
+.dashboard-layout.dark .sec-btn-link {
+  color: var(--gray-400);
+}
+
+/* ---------- My Activity ---------- */
+.act-day-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #FFFFFF;
+  border: var(--border);
+  border-radius: 999px;
+  padding: 4px;
+}
+
+.act-day-nav span {
+  min-width: 96px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.act-day-nav button {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: var(--gray-100);
+  color: var(--navy);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.act-day-nav button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.act-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.act-stat {
+  background: #FFFFFF;
+  border: var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.act-stat span {
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.act-stat strong {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--navy);
+}
+
+.act-thumb {
+  flex-shrink: 0;
+  width: 52px;
+  height: 40px;
+  padding: 0;
+  border: var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--gray-100);
+  cursor: zoom-in;
+}
+
+.act-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.reminder-info p svg {
+  vertical-align: -1px;
+}
+
+.act-shots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--space-2);
+}
+
+.act-shot {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.act-shot .act-thumb {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+}
+
+.act-viewer {
+  cursor: zoom-out;
+  padding: var(--space-4);
+}
+
+.act-viewer img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-elevated);
+}
+
+.act-viewer-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(248, 250, 252, 0.15);
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+/* ---------- presence check banner (top of every employee page) ---------- */
+.presence-banner {
+  position: sticky;
+  top: 12px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(1180px - 2 * var(--space-6));
+  margin: 12px auto 0;
+  padding: 10px 12px 10px 18px;
+  border-radius: var(--radius-md);
+  background: var(--blue);
+  color: #FFFFFF;
+  font-size: 14px;
+  box-shadow: var(--shadow-elevated);
+}
+
+.presence-banner span {
+  flex: 1;
+}
+
+.presence-banner .btn-primary {
+  width: auto;
+  flex-shrink: 0;
+  background: #FFFFFF;
+  color: var(--blue);
+  padding: 8px 16px;
+}
+
+.presence-banner .btn-primary:hover:not(:disabled) {
+  background: var(--blue-50);
+}
+
+.presence-banner-done {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.presence-banner-close {
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+}
+
+.dashboard-layout.dark .act-day-nav,
+.dashboard-layout.dark .act-stat {
+  background: var(--navy-700);
+  border-color: rgba(248, 250, 252, 0.1);
+}
+
+.dashboard-layout.dark .act-day-nav span,
+.dashboard-layout.dark .act-stat strong {
+  color: var(--white);
+}
+
+.dashboard-layout.dark .act-day-nav button {
+  background: rgba(248, 250, 252, 0.08);
+  color: var(--white);
+}
+
+.dashboard-layout.dark .act-stat span,
+.dashboard-layout.dark .act-shot {
+  color: var(--gray-400);
+}
+
+.dashboard-layout.dark .act-thumb {
+  border-color: rgba(248, 250, 252, 0.12);
+  background: rgba(248, 250, 252, 0.06);
+}
+
+.dashboard-layout.dark .presence-banner-done {
+  background: rgba(21, 128, 61, 0.2);
+  color: #4ADE80;
+}
+
+@media (max-width: 600px) {
+  .sec-page .reminder-item {
+    flex-wrap: wrap;
+  }
+  .sec-inline-form input[type="text"] {
+    max-width: none;
+  }
+  .act-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .presence-banner {
+    margin: 8px 12px 0;
+  }
+}
+
+/* ---------- admin pages ---------- */
+.review-row {
+  align-items: center;
+}
+
+.review-photo {
+  flex-shrink: 0;
+  width: 64px;
+  height: 48px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--gray-100);
+  border: var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.review-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.review-photo-empty {
+  font-size: 10.5px;
+  color: var(--gray-400);
+  text-align: center;
+}
+
+.review-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: 1px;
+}
+
+.review-dot-high { background: var(--danger); }
+.review-dot-medium { background: #F59E0B; }
+.review-dot-low { background: var(--gray-400); }
+
+.review-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.review-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--gray-100);
+  color: var(--navy-700);
+}
+
+.review-chip em {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--gray-500);
+}
+
+.review-chip-high { background: var(--danger-bg); color: var(--danger); }
+.review-chip-medium { background: var(--warning-bg); color: var(--warning); }
+
+.review-note {
+  display: block;
+  margin-top: 8px;
+  width: 100%;
+  max-width: 420px;
+  box-sizing: border-box;
+  resize: none;
+  font-family: inherit;
+  line-height: 1.45;
+}
+
+/* AI draft links under the note */
+.review-draft {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.review-draft-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--blue);
+  cursor: pointer;
+}
+
+.review-draft-btn:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.review-draft-btn:disabled {
+  color: var(--gray-400);
+  cursor: default;
+}
+
+.admin-stats.sec-admin-stats {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.sec-admin-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 var(--space-2);
+}
+
+.sec-admin-section-head .reminders-subheading {
+  margin: 0;
+}
+
+.admin-action-btn.sec-admin-all {
+  flex: none;
+  padding: 8px 14px;
+}
+
+.admin-date.sec-admin-note {
+  margin: 2px 0 var(--space-3);
+}
+
+.sec-cell-icon {
+  vertical-align: -2px;
+  color: var(--gray-400);
+}
+
+.sec-tag-warn {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+
+.sec-number-fields {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sec-btn-secondary {
+  padding: 10px 16px;
+  background: #FFFFFF;
+  color: var(--navy);
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sec-btn-secondary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.sec-item-warn {
+  border-color: #FCD34D;
+  background: var(--warning-bg);
+}
+
+.sec-back {
+  display: inline-block;
+  margin-bottom: var(--space-3);
+}
+
+.sec-modal-link {
+  margin-left: var(--space-3);
+}
+
+.act-admin-filters {
+  align-items: center;
+}
+
+.sec-admin-activity .act-stats {
+  margin-bottom: var(--space-3);
+}
+
+/* admin dark */
+.admin-layout.dark .reminder-item,
+.admin-layout.dark .act-stat,
+.admin-layout.dark .act-day-nav {
+  background: var(--navy-700);
+  border-color: rgba(248, 250, 252, 0.1);
+}
+
+.admin-layout.dark .reminder-info h3,
+.admin-layout.dark .reminders-subheading,
+.admin-layout.dark .act-stat strong,
+.admin-layout.dark .act-day-nav span {
+  color: var(--white);
+}
+
+.admin-layout.dark .reminder-info p,
+.admin-layout.dark .act-stat span,
+.admin-layout.dark .act-shot,
+.admin-layout.dark .sec-btn-link {
+  color: var(--gray-400);
+}
+
+.admin-layout.dark .act-day-nav button {
+  background: rgba(248, 250, 252, 0.08);
+  color: var(--white);
+}
+
+.admin-layout.dark .review-photo,
+.admin-layout.dark .act-thumb {
+  background: rgba(248, 250, 252, 0.06);
+  border-color: rgba(248, 250, 252, 0.12);
+}
+
+.admin-layout.dark .review-chip {
+  background: rgba(248, 250, 252, 0.08);
+  color: var(--gray-200);
+}
+
+.admin-layout.dark .review-chip em {
+  color: var(--gray-400);
+}
+
+.admin-layout.dark .review-chip-high { background: rgba(185, 28, 28, 0.22); color: #FCA5A5; }
+.admin-layout.dark .review-chip-medium { background: rgba(180, 83, 9, 0.22); color: #FCD34D; }
+
+.admin-layout.dark .sec-btn-secondary {
+  background: transparent;
+  border-color: rgba(248, 250, 252, 0.2);
+  color: var(--white);
+}
+
+.admin-layout.dark .sec-item-warn {
+  background: rgba(180, 83, 9, 0.16);
+  border-color: rgba(252, 211, 77, 0.35);
+}
+
+@media (max-width: 900px) {
+  .admin-stats.sec-admin-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .review-row {
+    flex-wrap: wrap;
+  }
+}
+
+/* ---------- change log ---------- */
+.log-when {
+  white-space: nowrap;
+}
+
+.log-change {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.log-change strong {
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.log-change span {
+  color: var(--gray-400);
+  margin: 0 3px;
+}
+
+/* ---------- clickable stat cards (Employees) ---------- */
+.stat-card-clickable {
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.stat-card-clickable:hover {
+  border-color: var(--gray-300);
+  transform: translateY(-1px);
+}
+
+.stat-card-clickable:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.stat-card-clickable.is-active {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 1px var(--blue), var(--shadow-card);
+}
+
+.admin-layout.dark .stat-card-clickable:hover {
+  border-color: rgba(248, 250, 252, 0.25);
+}
+
+.sec-wifi-chips {
+  margin-top: 10px;
+}
+
+.sec-chip-x {
+  border: none;
+  background: none;
+  padding: 0 0 0 4px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--gray-500);
+  cursor: pointer;
+}
+
+.sec-chip-x:hover {
+  color: var(--danger);
+}
+
+.reminder-info p.sec-face-tips {
+  margin-bottom: 6px;
+  color: var(--navy-700);
+}
+
+.dashboard-layout.dark .reminder-info p.sec-face-tips {
+  color: var(--gray-200);
+}
+
+.sec-btn-link.sec-withdraw {
+  padding: 4px 0 0;
+}
+
+.admin-layout.dark .review-draft-btn:not(:disabled) {
+  color: #60A5FA;
+}

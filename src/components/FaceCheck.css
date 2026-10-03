@@ -1,0 +1,129 @@
+.popup-box.face-check-box {
+  width: 400px;
+  max-width: calc(100vw - 32px);
+}
+
+.face-check-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.face-check-head h3 {
+  margin: 0;
+}
+
+.face-check-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--gray-500);
+  cursor: pointer;
+}
+
+.face-check-close:hover {
+  background: var(--gray-100);
+}
+
+.face-check-video {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--navy);
+}
+
+.face-check-video video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);   /* mirror, feels natural */
+  display: block;
+}
+
+.face-check-oval {
+  position: absolute;
+  left: 50%;
+  top: 48%;
+  width: 46%;
+  height: 72%;
+  transform: translate(-50%, -50%);
+  border: 2px dashed rgba(248, 250, 252, 0.55);
+  border-radius: 50%;
+  box-shadow: 0 0 0 999px rgba(15, 23, 42, 0.28);
+  pointer-events: none;
+  transition: border-color 0.2s ease;
+}
+
+.face-check-video.is-looking .face-check-oval {
+  border-color: rgba(96, 165, 250, 0.9);
+  border-style: solid;
+}
+
+.face-check-cover {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gray-300);
+  font-size: 13.5px;
+  background: var(--navy);
+}
+
+.popup-box p.face-check-hint {
+  margin: 14px 0 0;
+  text-align: center;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.popup-box p.face-check-sub {
+  margin: 6px 0 0;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--gray-500);
+}
+
+.popup-box p.face-check-error {
+  margin: 14px 0 var(--space-3);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 13px;
+}
+
+.face-check-box .popup-buttons {
+  margin-top: var(--space-3);
+}
+
+.dashboard-layout.dark .face-check-close:hover {
+  background: rgba(248, 250, 252, 0.08);
+}
+
+.dashboard-layout.dark .popup-box p.face-check-hint {
+  color: var(--white);
+}
+
+.dashboard-layout.dark .popup-box p.face-check-sub {
+  color: var(--gray-400);
+}
+
+.dashboard-layout.dark .popup-box p.face-check-error {
+  background: rgba(180, 83, 9, 0.18);
+  color: #FBBF24;
+}
+
+.face-check-preview {
+  display: block;
+  width: 100%;
+  border-radius: var(--radius-md);
+  transform: scaleX(-1);   /* same way round as the live view */
+}

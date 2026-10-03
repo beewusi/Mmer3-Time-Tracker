@@ -257,6 +257,27 @@ input:focus-visible,
   transition: width 0.2s ease, padding 0.2s ease;
 }
 
+/* nav group headings (Overview, Requests…) */
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-group + .nav-group {
+  margin-top: 10px;
+}
+
+.nav-heading {
+  margin: 0;
+  padding: 0 12px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--gray-500);
+}
+
 /* Collapsed: narrow icon rail, names show as tooltips (title).
    Expand button moves down above the profile. */
 @media (min-width: 901px) {
@@ -293,6 +314,19 @@ input:focus-visible,
 
   .is-collapsed .admin-brand {
     margin-bottom: var(--space-5);
+  }
+
+  /* headings become a thin line between groups */
+  .is-collapsed .nav-heading {
+    font-size: 0;
+    padding: 0;
+    height: 1px;
+    margin: 0 8px 6px;
+    background: rgba(248, 250, 252, 0.1);
+  }
+
+  .is-collapsed .nav-group:first-child .nav-heading {
+    display: none;
   }
 
   .is-collapsed .sidebar-expand-btn {

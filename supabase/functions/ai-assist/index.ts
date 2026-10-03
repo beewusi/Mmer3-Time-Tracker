@@ -26,7 +26,9 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-async function callGemini(system: string, userMessage: string, maxTokens = 400) {
+type Turn = { role: 'user' | 'model'; text: string };
+
+async function callGemini(system: string, userMessage: string | Turn[], maxTokens = 400) {
   // API keys go in x-goog-api-key. Bearer only takes Google sign-in tokens
   // (that's the "Expected OAuth 2 access token" 401).
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
@@ -39,7 +41,9 @@ async function callGemini(system: string, userMessage: string, maxTokens = 400) 
     },
     body: JSON.stringify({
       system_instruction: { parts: [{ text: system }] },
-      contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+      contents: typeof userMessage === 'string'
+        ? [{ role: 'user', parts: [{ text: userMessage }] }]
+        : userMessage.map(t => ({ role: t.role, parts: [{ text: t.text }] })),
       generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 }
     })
   });
@@ -150,18 +154,58 @@ Deno.serve(async (req: Request) => {
       return jsonResponse(parsed);
     }
 
+    // ---------- Review note (admin, Review page) ----------
+    if (task === 'review_note') {
+      const { employeeName, decision, when, flags, checks } = body;
+      const accepted = decision === 'authorised';
+      const system = 'You write a short note from a workplace admin to an employee about a clock-in ' +
+        'session that the time-tracking app flagged for review. The employee reads it. 1-2 sentences, ' +
+        'under 250 characters. Plain, calm and fair: say what was noticed in everyday words and what the ' +
+        (accepted
+          ? 'decision is (accepted, the session counts as normal). If it helps, one practical tip so it doesn\'t happen again.'
+          : 'decision is (declined, the session won\'t count). Say they can speak to the admin if they think it\'s wrong.') +
+        ' Never accuse or guess at reasons. No greeting, sign-off, name or placeholders. British English spelling.';
+      const user = `Employee: ${employeeName}\nSession: ${when}\n` +
+        `What was flagged: ${(flags || []).join('; ') || 'nothing specific'}\n` +
+        `Checks that passed: ${(checks || []).join(', ') || 'none recorded'}\n` +
+        `Decision: ${accepted ? 'accepted' : 'declined'}\n\nWrite the note.`;
+      const text = await callGemini(system, user, 150);
+      return jsonResponse({ message: text.trim().replace(/^"|"$/g, '') });
+    }
+
     // ---------- Support chat ----------
     if (task === 'chat') {
       const { messages, context } = body;
-      const system = 'You are a concise workplace assistant for the Mmerℇ time-tracking app. Answer ' +
-        "only using the FAQ and the employee's own data given below — if you don't know, say so and " +
-        'suggest they contact an admin. Keep answers to 2-4 sentences. British English spelling.\n\n' +
+      const system = 'You are the assistant inside Mmerℇ, a time-tracking app (clock in/out, breaks, ' +
+        'timesheets, time off, face and laptop checks). You are talking to an employee.\n\n' +
+        'How to answer:\n' +
+        '- Questions about the app or their own work: answer from the FAQ, app guide and their data ' +
+        'below. Be specific (which page, which button).\n' +
+        '- Everyday questions (simple maths, dates and days, quick facts, explaining a word, help ' +
+        'wording a message or a time off reason): just answer them, briefly and correctly.\n' +
+        '- Things only the company knows (pay, contracts, leave allowance, HR rules, why a request ' +
+        'was declined) or that the admin has to do (approving time off, correcting a timesheet, ' +
+        'approving a laptop or face, reviewing a flag): say plainly you can\'t see or do that, say ' +
+        'who can (their admin) and what to tell them or where in the app to go, e.g. "Send a time ' +
+        'off request from Time Off" or "Ask your admin to correct it; they\'ll need the date and the right times".\n' +
+        '- Never invent their data, company policy or anything about other employees. Never reveal ' +
+        'other people\'s information. Don\'t help get around the clock-in checks.\n' +
+        '- Anything harmful, or medical, legal or financial advice beyond common sense: decline ' +
+        'in one friendly sentence and suggest the right kind of person to ask.\n' +
+        '- Keep it short: 1-4 sentences, or a few short steps when they ask how to do something. ' +
+        'Plain text, no markdown headings. Friendly, not chatty. British English spelling.\n\n' +
+        `Now: ${context?.now || new Date().toISOString()}\n\n` +
         `FAQ:\n${context?.faq || ''}\n\nThis employee's data:\n${context?.employeeData || ''}`;
-      const lastMessages = (messages || []).slice(-8);
-      const conversationText = lastMessages
-        .map((m: { role: string; content: string }) => `${m.role === 'user' ? 'Employee' : 'Assistant'}: ${m.content}`)
-        .join('\n');
-      const text = await callGemini(system, conversationText, 300);
+      // the opening greeting is the app's, not part of the conversation
+      const turns: Turn[] = (messages || [])
+        .slice(-10)
+        .map((m: { role: string; content: string }) => ({
+          role: (m.role === 'user' ? 'user' : 'model') as Turn['role'],
+          text: String(m.content || '').slice(0, 2000)
+        }));
+      while (turns.length && turns[0].role !== 'user') turns.shift();
+      if (!turns.length) throw new Error('No question was sent.');
+      const text = await callGemini(system, turns, 400);
       return jsonResponse({ message: text.trim() });
     }
 

@@ -113,7 +113,28 @@
   grid-column: 3;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 14px;
+}
+
+/* admin edits: reason box, its own line above Save / Cancel */
+.st-reason {
+  flex-basis: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-family: inherit;
+  color: var(--navy);
+  background: #FFFFFF;
+  line-height: 1.45;
+  resize: none;
+}
+
+.st-reason:focus {
+  outline: none;
+  border-color: var(--blue);
 }
 
 .st-link {
@@ -168,6 +189,12 @@
 }
 
 /* dark mode (both dashboards) */
+.admin-layout.dark .st-reason {
+  background: rgba(248, 250, 252, 0.06);
+  border-color: rgba(248, 250, 252, 0.15);
+  color: var(--white);
+}
+
 .admin-layout.dark .st-row,
 .dashboard-layout.dark .st-row {
   border-top-color: rgba(248, 250, 252, 0.1);

@@ -146,3 +146,23 @@ export function validateSession(clockIn, sessionEnd, breakList) {
   }
   return '';
 }
+
+// "3 Oct, 09:41"
+export function formatDayTime(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}, ${dateToHHMM(d)}`;
+}
+
+// "just now", "12 min ago", "3 h ago", then the date
+export function formatAgo(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  const mins = Math.round((Date.now() - d.getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} h ago`;
+  return formatDayTime(d);
+}

@@ -9,7 +9,7 @@ import './Legal.css';
 // sign in / sign up open them in a new tab. Render needs the /* -> /index.html
 // rewrite for these to load directly.
 const CONTACT_EMAIL = 'ebelinda695@gmail.com';
-const LAST_UPDATED = '1 October 2026';
+const LAST_UPDATED = '3 October 2026';
 const YEAR = 2026;
 
 function Contact() {
@@ -21,22 +21,30 @@ const PRIVACY = {
   title: 'Privacy Notice',
   icon: ShieldIcon,
   intro: 'What Mmerℇ records about you while you work, why, who can see it and what you can ask for.',
-  readTime: '5 min read',
+  readTime: '8 min read',
   glance: [
     { icon: PinIcon, title: 'No exact location', text: 'Only whether you clocked in at the office is saved, never your coordinates.' },
-    { icon: UsersIcon, title: 'Seen by your admins', text: 'Your records are visible to you and your organisation’s administrators only.' },
-    { icon: CheckCircleIcon, title: 'Never sold', text: 'Your information is only used to run Mmerℇ for your organisation.' },
+    { icon: UsersIcon, title: 'Seen by your admins', text: 'Your records, photos and screenshots are visible to you and your organisation’s administrators only.' },
+    { icon: ClockIcon, title: 'Only while clocked in', text: 'Presence checks, screenshots and activity are only recorded during a working session.' },
     { icon: MailIcon, title: 'Ask anytime', text: 'You can ask to see or correct what’s held about you.' }
   ],
   sections: [
     {
       title: 'Information we collect',
-      short: 'Your account details, your work records and the result of a location check when you clock in.',
+      short: 'Your account and work records, plus the checks that confirm it’s really you clocking in and that you’re at work during a session.',
       body: (
         <dl className="legal-defs">
           <div><dt>Account details</dt><dd>Your name, email address, password (stored encrypted and never visible to anyone), department and, if you add them, your phone number and profile photo.</dd></div>
           <div><dt>Work records</dt><dd>Clock in and clock out times, each break you take, hours worked and any changes an administrator makes to them.</dd></div>
           <div><dt>Location check</dt><dd>When you clock in, your device's location is compared with the office location. Only the result is saved: authorised, unauthorised or unavailable. Your exact coordinates are not stored.</dd></div>
+          <div><dt>Work laptop</dt><dd>When you register your work laptop, a passkey is created on it. Mmerℇ keeps only the passkey's public part, a name for the laptop and when it was last used. Your fingerprint, face or PIN for Windows Hello or Touch ID never leave the laptop and are never seen by Mmerℇ.</dd></div>
+          <div><dt>Face check</dt><dd>Only with your consent. You take a photo when you set it up, and it is turned into a face template (a list of 128 numbers). At clock-in and during presence checks, a webcam photo is compared with that template on your own computer, along with a quick blink check. See “Face data and consent” below.</dd></div>
+          <div><dt>Check photos</dt><dd>The webcam photo taken at clock-in and at each presence check, and whether it matched.</dd></div>
+          <div><dt>Presence checks</dt><dd>A few times during each working session (about four) you'll be asked to show your face within five minutes. The time you answered, the result and the photo are saved.</dd></div>
+          <div><dt>Screenshots</dt><dd>If your organisation uses the Mmerℇ desktop app, it takes two or three screenshots of your screen an hour, only while you're clocked in. They show whatever is on screen at that moment, so close anything personal while you're clocked in. You can see your own screenshots on My Activity.</dd></div>
+          <div><dt>Network and device</dt><dd>At clock-in: your internet address, compared with your office's internet connection; the browser and laptop you used; and, from the desktop app, the name of the Wi-Fi network. A random code saved in your browser shows when two accounts are used on the same laptop.</dd></div>
+          <div><dt>Activity</dt><dd>While you're clocked in: whether your computer is in use, idle or locked, and when the app last had contact. Not what you type, which websites you visit or what you work on.</dd></div>
+          <div><dt>Sign-in attempts</dt><dd>The email address and time of each sign-in attempt, used to lock an account for a short time after too many wrong passwords.</dd></div>
           <div><dt>Time off</dt><dd>The type, dates and any reason you give, plus the administrator's response.</dd></div>
           <div><dt>Reminders</dt><dd>Which reminders you switch on and, if you turn on desktop notifications, a technical address your browser provides so notifications can reach that device.</dd></div>
           <div><dt>Assistant requests</dt><dd>If you use the AI assistant features, the text you type and the work details needed to answer you.</dd></div>
@@ -46,15 +54,34 @@ const PRIVACY = {
     },
     {
       title: 'Why we use it',
-      short: 'To keep accurate working-time records and send you the reminders you choose.',
+      short: 'To keep accurate working-time records, make sure nobody clocks in for someone else, and send the reminders you choose.',
       body: (
         <ul className="legal-list">
           <li>Keeping accurate attendance and working-time records for your organisation.</li>
           <li>Letting administrators review, correct and approve timesheets and time off.</li>
-          <li>Flagging clock-ins made away from the office so they can be reviewed.</li>
+          <li>Making sure the person clocking in is the employee the account belongs to, on their own work laptop, so nobody can clock in for someone else.</li>
+          <li>Checking that you're still at work during a session, through presence checks, activity and, with the desktop app, screenshots.</li>
+          <li>Flagging clock-ins and sessions that need a second look (away from the office, a face that didn't match, a missed presence check) so an administrator can review them.</li>
           <li>Sending the reminders and summaries you switch on, and account emails such as password resets.</li>
           <li>Keeping the service secure and working properly.</li>
         </ul>
+      )
+    },
+    {
+      title: 'Face data and consent',
+      short: 'Your face is only used to confirm it’s you clocking in, and only after you agree.',
+      body: (
+        <>
+          <ul className="legal-list">
+            <li>The face check is set up only after you tick the consent box. The date you agreed and the version of this notice are saved.</li>
+            <li>Your face template is used for one thing: confirming it's you clocking in and answering presence checks. It is not used to identify you anywhere else, and it is never shared or sold.</li>
+            <li>The comparison runs on your own computer. Photos and templates are not sent to any outside face-recognition service.</li>
+            <li>One face per person. A face that is already registered to another account can't be registered again.</li>
+            <li>A new or changed face is checked by an administrator before it is used.</li>
+            <li>If the check doesn't recognise you after two tries, you can still clock in. The session is flagged for an administrator to look at, never stopped automatically.</li>
+          </ul>
+          <p>You can withdraw your consent at any time by contacting <Contact />. Your face template and setup photo are then deleted, and your organisation will agree another way for you to confirm your clock-ins.</p>
+        </>
       )
     },
     {
@@ -62,9 +89,9 @@ const PRIVACY = {
       short: 'You and your organisation’s administrators. A few trusted services help run the app.',
       body: (
         <>
-          <p>You can see your own records. Administrators of your organisation can see and manage everyone's records. Other employees cannot see your information.</p>
+          <p>You can see your own records, check photos, presence checks and screenshots. Administrators of your organisation can see and manage everyone's, including flagged sessions and the evidence behind them. Other employees cannot see your information.</p>
           <div className="legal-providers">
-            <div><strong>Supabase</strong><span>Database, sign-in and profile photos</span></div>
+            <div><strong>Supabase</strong><span>Database, sign-in, photos and screenshots</span></div>
             <div><strong>Render</strong><span>Hosts the website</span></div>
             <div><strong>EmailJS &amp; Gmail</strong><span>Reminder and account emails</span></div>
             <div><strong>Google</strong><span>Sign-in, if you choose it</span></div>
@@ -76,9 +103,17 @@ const PRIVACY = {
     },
     {
       title: 'How long we keep it',
-      short: 'Work records stay with your organisation, even after an account is deleted.',
+      short: 'Work records stay with your organisation. Photos and screenshots are deleted after a short time.',
       body: (
-        <p>Work records, breaks and time off are kept for as long as your organisation needs them, including after your account is deleted, so past timesheets stay complete. Your sign-in account is removed when an administrator deletes it.</p>
+        <dl className="legal-defs">
+          <div><dt>Work records</dt><dd>Clock-ins, breaks, time off, flags and the administrator's decisions are kept for as long as your organisation needs them, including after your account is deleted, so past timesheets stay complete.</dd></div>
+          <div><dt>Screenshots</dt><dd>Deleted after 14 days.</dd></div>
+          <div><dt>Check photos</dt><dd>Clock-in and presence check photos are deleted after 30 days.</dd></div>
+          <div><dt>Face template</dt><dd>Kept until you withdraw consent or your account is deleted, then deleted with its setup photo.</dd></div>
+          <div><dt>Work laptop</dt><dd>Kept until you or an administrator remove the laptop, or your account is deleted.</dd></div>
+          <div><dt>Sign-in attempts</dt><dd>Deleted after 30 days.</dd></div>
+          <div><dt>Sign-in account</dt><dd>Removed when an administrator deletes it.</dd></div>
+        </dl>
       )
     },
     {
@@ -98,8 +133,9 @@ const PRIVACY = {
             <li>ask to see the information held about you</li>
             <li>ask for it to be corrected</li>
             <li>object to how it is used</li>
+            <li>withdraw your consent to the face check</li>
           </ul>
-          <p>Your name, phone number, photo and password can be changed from your Profile page. For anything else, contact <Contact />. If you're not happy with the response, you can complain to the Data Protection Commission of Ghana.</p>
+          <p>Your name, phone number, photo and password can be changed from your Profile page. Your check photos, presence checks and screenshots are on My Activity, and your registered laptop and face check are under Devices &amp; Security. For anything else, contact <Contact />. If you're not happy with the response, you can complain to the Data Protection Commission of Ghana.</p>
         </>
       )
     },
@@ -118,10 +154,10 @@ const TERMS = {
   title: 'Terms of Use',
   icon: FileTextIcon,
   intro: 'The rules for using Mmerℇ. Creating an account or signing in means you agree to them.',
-  readTime: '4 min read',
+  readTime: '5 min read',
   glance: [
     { icon: CheckCircleIcon, title: 'Approval first', text: 'New accounts are approved by an administrator before use.' },
-    { icon: ClockIcon, title: 'Honest records', text: 'Clock in and out for yourself, at the right times.' },
+    { icon: ClockIcon, title: 'Honest records', text: 'Clock in and out for yourself, from your own work laptop.' },
     { icon: AlertIcon, title: 'Auto clock-out', text: 'Sessions still running after 8 h 15 min end automatically.' },
     { icon: ChatIcon, title: 'Check AI suggestions', text: 'Assistant drafts can be wrong, review before submitting.' }
   ],
@@ -150,10 +186,26 @@ const TERMS = {
       body: (
         <ul className="legal-list">
           <li>Don't clock in or out for someone else, fake your location, or change records in ways the app doesn't allow.</li>
+          <li>Clock in from your own registered work laptop, and don't let anyone else use your laptop's passkey or your account.</li>
+          <li>Don't try to fool the face check, for example with a photo or video of someone else.</li>
           <li>Allow location access when you clock in. If it's unavailable or outside the office area, the clock-in still counts but is flagged for review.</li>
           <li>Sessions still running after 8 hours 15 minutes are clocked out automatically.</li>
-          <li>Administrators can review, correct, authorise, decline and approve records and time off.</li>
+          <li>Administrators can review, correct, authorise, decline and approve records and time off. Every change an administrator makes to a saved session keeps the original and the reason.</li>
         </ul>
+      )
+    },
+    {
+      title: 'Checks during your session',
+      short: 'Answer presence checks and keep the desktop app running while you’re clocked in.',
+      body: (
+        <>
+          <ul className="legal-list">
+            <li>Answer presence checks within five minutes. A missed check is flagged.</li>
+            <li>If your organisation uses the desktop app, keep it running while you're clocked in. Long gaps with no contact from the app are flagged.</li>
+            <li>Time when your computer is idle or locked for a long stretch may be flagged.</li>
+          </ul>
+          <p>A flag is not a penalty. It asks an administrator to look at the session and authorise or decline it. How these checks work, and what is saved, is explained in the Privacy Notice.</p>
+        </>
       )
     },
     {

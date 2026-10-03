@@ -244,3 +244,72 @@ export const ArrowUpRightIcon = (props) => (
     <path d="M7 17L17 7M8 7h9v9" />
   </svg>
 );
+
+export const LaptopIcon = (props) => (
+  <svg {...base} {...props}>
+    <rect x="4" y="4" width="16" height="11" rx="1.5" />
+    <path d="M2 19h20" />
+  </svg>
+);
+
+export const FaceIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M3 8V5.5A2.5 2.5 0 0 1 5.5 3H8M16 3h2.5A2.5 2.5 0 0 1 21 5.5V8M21 16v2.5a2.5 2.5 0 0 1-2.5 2.5H16M8 21H5.5A2.5 2.5 0 0 1 3 18.5V16" />
+    <path d="M9 9.5v1M15 9.5v1M9.5 15.5c1.4 1 3.6 1 5 0" />
+  </svg>
+);
+
+export const MonitorIcon = (props) => (
+  <svg {...base} {...props}>
+    <rect x="3" y="4" width="18" height="12" rx="1.5" />
+    <path d="M8 20h8M12 16v4" />
+  </svg>
+);
+
+export const ActivityIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M3 12h4l3-8 4 16 3-8h4" />
+  </svg>
+);
+
+export const FlagIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M5 21V4M5 4h11l-2 4 2 4H5" />
+  </svg>
+);
+
+export const CameraIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" />
+    <circle cx="12" cy="13" r="3.5" />
+  </svg>
+);
+
+export const WifiIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0M8.5 16a5 5 0 0 1 7 0" />
+    <circle cx="12" cy="19.5" r="0.8" fill="currentColor" />
+  </svg>
+);
+
+export const HistoryIcon = (props) => (
+  <svg {...base} {...props}>
+    <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+    <path d="M3 3v5h5M12 7v5l3 2" />
+  </svg>
+);
+
+export const SearchIcon = (props) => (
+  <svg {...base} {...props}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="M20 20l-3.5-3.5" />
+  </svg>
+);
+
+export const ImageIcon = (props) => (
+  <svg {...base} {...props}>
+    <rect x="3" y="4" width="18" height="16" rx="1.5" />
+    <circle cx="9" cy="10" r="1.6" />
+    <path d="M21 16l-5-5-9 9" />
+  </svg>
+);

@@ -5,6 +5,7 @@ import {
 } from '../lib/time';
 import { ClockTimePicker, DurationPicker } from './TimeScrollPicker';
 import { PencilIcon } from '../icons';
+import AutoTextarea from './AutoTextarea';
 import './SessionTimeline.css';
 
 // One session as a list of entries: work, break, work ... clocked out.
@@ -90,9 +91,11 @@ function suggestBreak(rows) {
   };
 }
 
-function SessionTimeline({ session, editable = false, onSave }) {
+// requireReason: admin edits need a reason, kept in the change log
+function SessionTimeline({ session, editable = false, onSave, requireReason = false }) {
   const [editing, setEditing] = useState(null); // { key, start, end } | { key: 'new' ... } | { key: 'total', total }
   const [error, setError] = useState('');
+  const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
 
   const nowHHMM = dateToHHMM(new Date());
@@ -109,6 +112,7 @@ function SessionTimeline({ session, editable = false, onSave }) {
   function cancel() {
     setEditing(null);
     setError('');
+    setReason('');
   }
 
   async function commit(nextModel) {
@@ -117,8 +121,12 @@ function SessionTimeline({ session, editable = false, onSave }) {
       setError(problem);
       return;
     }
+    if (requireReason && !reason.trim()) {
+      setError('Add a reason for this change.');
+      return;
+    }
     setSaving(true);
-    const saveError = await onSave(nextModel);
+    const saveError = await onSave(nextModel, reason.trim());
     setSaving(false);
     if (saveError) {
       setError(saveError);
@@ -126,6 +134,7 @@ function SessionTimeline({ session, editable = false, onSave }) {
     }
     setEditing(null);
     setError('');
+    setReason('');
   }
 
   function saveRow(row) {
@@ -156,6 +165,16 @@ function SessionTimeline({ session, editable = false, onSave }) {
   function renderActions(onSaveClick, extra) {
     return (
       <div className="st-edit-actions">
+        {requireReason && (
+          <AutoTextarea
+            className="st-reason"
+            placeholder="Reason for the change (kept in the change log)"
+            value={reason}
+            maxLength={300}
+            maxRows={4}
+            onChange={e => setReason(e.target.value)}
+          />
+        )}
         <button type="button" className="st-link" onClick={onSaveClick} disabled={saving}>{saving ? 'Saving...' : 'Save'}</button>
         <button type="button" className="st-link st-link-muted" onClick={cancel} disabled={saving}>Cancel</button>
         {extra}

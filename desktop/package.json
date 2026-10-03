@@ -1,0 +1,60 @@
+{
+  "name": "mmer3-desktop",
+  "productName": "Mmerℇ",
+  "version": "1.0.0",
+  "description": "Mmerℇ desktop app: presence checks and screenshots while clocked in",
+  "author": "Belinda Ewusi",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win nsis",
+    "dist:mac": "electron-builder --mac dmg"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.mmer3.desktop",
+    "productName": "Mmer3",
+    "files": [
+      "main.js",
+      "preload.js",
+      "config.json",
+      "build/tray.png",
+      "build/trayTemplate.png",
+      "build/trayTemplate@2x.png",
+      "build/icon.png"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "build/icon.png",
+      "category": "public.app-category.productivity",
+      "identity": null,
+      "extendInfo": {
+        "NSCameraUsageDescription": "Mmerℇ uses the camera for presence checks while you're clocked in.",
+        "LSUIElement": true
+      }
+    },
+    "extraResources": [
+      {
+        "from": "config.json",
+        "to": "config.json"
+      }
+    ]
+  }
+}

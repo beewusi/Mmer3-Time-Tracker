@@ -5,12 +5,14 @@ import PasswordInput from '../components/PasswordInput';
 import { AuthDivider, GoogleButton } from '../components/SocialAuth';
 import './Login.css';
 
-function Login({ onLogin, onGoToSignUp }) {
+// notice: shown on arrival (e.g. signed out after 12 hours)
+// hideGoogle: the desktop app, where Google won't allow its sign-in page
+function Login({ onLogin, onGoToSignUp, notice = '', hideGoogle = false }) {
   const [mode, setMode] = useState('login'); // 'login' | 'forgot'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [info, setInfo] = useState('');
+  const [info, setInfo] = useState(notice);
   const [loading, setLoading] = useState(false);
 
   async function handleLogin() {
@@ -21,6 +23,41 @@ function Login({ onLogin, onGoToSignUp }) {
 
     setLoading(true);
     setError('');
+
+    // Through the sign-in function (5 wrong passwords = locked 15 min).
+    // If it isn't deployed or can't be reached, sign in directly as before.
+    const { data: fnData, error: fnError } = await supabase.functions.invoke('sign-in', {
+      body: { email, password }
+    });
+
+    if (!fnError && fnData?.access_token) {
+      const { data, error } = await supabase.auth.setSession({
+        access_token: fnData.access_token,
+        refresh_token: fnData.refresh_token
+      });
+      setLoading(false);
+      if (error) {
+        setError('Couldn’t finish signing in. Please try again.');
+      } else {
+        onLogin(data.user);
+      }
+      return;
+    }
+
+    let fnMessage = '';
+    const status = fnError?.context?.status;
+    if (fnError?.context && typeof fnError.context.json === 'function' && status !== 404) {
+      try {
+        fnMessage = (await fnError.context.json())?.error || '';
+      } catch {
+        fnMessage = '';
+      }
+    }
+    if (fnMessage) {
+      setError(fnMessage);
+      setLoading(false);
+      return;
+    }
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email: email,
@@ -124,8 +161,12 @@ function Login({ onLogin, onGoToSignUp }) {
                 {loading ? 'Signing in...' : 'Sign In'}
               </button>
 
-              <AuthDivider />
-              <GoogleButton onClick={handleGoogleLogin} />
+              {!hideGoogle && (
+                <>
+                  <AuthDivider />
+                  <GoogleButton onClick={handleGoogleLogin} />
+                </>
+              )}
 
               <p className="auth-switch-link">
                 Don't have an account?{' '}

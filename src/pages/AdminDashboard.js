@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../supabase';
 import { callAI } from '../lib/ai';
 import {
@@ -11,10 +11,17 @@ import './AdminDashboard.css';
 import {
   HourglassIcon, UsersIcon, RefreshIcon, LogoutIcon, TimesheetIcon,
   SuitcaseIcon, ClockIcon, CoffeeIcon, CheckCircleIcon, XIcon,
-  SettingsIcon, PinIcon, UserIcon, MenuIcon, PanelLeftIcon
+  SettingsIcon, PinIcon, UserIcon, MenuIcon, PanelLeftIcon,
+  FlagIcon, LaptopIcon, ActivityIcon, HistoryIcon, SearchIcon
 } from '../icons';
 import { loadPref, savePref } from '../lib/prefs';
 import ThemeToggle from '../components/ThemeToggle';
+import AdminReview from './AdminReview';
+import AdminDevices from './AdminDevices';
+import AdminActivity from './AdminActivity';
+import AdminSecuritySettings from './AdminSecuritySettings';
+import AdminChangeLog from './AdminChangeLog';
+import EmployeeSearch, { useSearchShortcut, SEARCH_HINT } from '../components/EmployeeSearch';
 
 // Starter departments for the picker.
 const DEFAULT_DEPARTMENT_SUGGESTIONS = ['Operations', 'Finance', 'Human Resources', 'Sales', 'Engineering'];
@@ -32,7 +39,10 @@ function isCounted(record) {
 }
 
 // tooltip text for the collapsed sidebar
-const NAV_TITLES = { employees: 'Employees', approvals: 'Approvals', timesheets: 'Timesheets', timeoff: 'Time Off', settings: 'Settings' };
+const NAV_TITLES = {
+  employees: 'Employees', review: 'Review', approvals: 'Approvals', timesheets: 'Timesheets',
+  timeoff: 'Time Off', devices: 'Devices', activity: 'Activity', changelog: 'Change log', settings: 'Settings'
+};
 
 function AdminDashboard({ user, onLogout }) {
   const [employees, setEmployees] = useState([]);
@@ -86,6 +96,14 @@ function AdminDashboard({ user, onLogout }) {
   const [locationSavingId, setLocationSavingId] = useState(null);
   const [refreshState, setRefreshState] = useState('idle');
   const [breaks, setBreaks] = useState([]);
+  // counts for the Review and Devices badges
+  const [openReviewCount, setOpenReviewCount] = useState(0);
+  const [pendingDeviceCount, setPendingDeviceCount] = useState(0);
+  const [activityUserId, setActivityUserId] = useState('');
+  const [activityVisit, setActivityVisit] = useState(0);   // new visit = fresh Activity page
+  const [showSearch, setShowSearch] = useState(false);
+  const openSearch = useCallback(() => setShowSearch(true), []);
+  useSearchShortcut(openSearch);
 
   const dayDetailRef = useRef(null);
   const scrollToDetailRef = useRef(false);
@@ -220,7 +238,21 @@ function AdminDashboard({ user, onLogout }) {
     if (allRecords) setRecords(allRecords);
     if (timeOff) setAllTimeOff(timeOff);
     await refreshStatuses();
+    await loadSecurityCounts();
     if (!silent) setLoading(false);
+  }
+
+  // Review = sessions with open flags. Devices = laptops + faces waiting.
+  // Tables missing (SQL not run yet) just give 0.
+  async function loadSecurityCounts() {
+    const [flags, devices, faces] = await Promise.all([
+      supabase.from('session_flags').select('session_id, id').eq('status', 'open'),
+      supabase.from('devices').select('id').eq('status', 'pending'),
+      supabase.from('face_profiles').select('user_id').eq('status', 'pending')
+    ]);
+    const sessions = new Set((flags.data || []).map(f => f.session_id || f.id));
+    setOpenReviewCount(sessions.size);
+    setPendingDeviceCount((devices.data || []).length + (faces.data || []).length);
   }
 
   function getCurrentDate() {
@@ -556,6 +588,20 @@ function AdminDashboard({ user, onLogout }) {
       auto_clock_out_sent: false,
       updated_at: new Date().toISOString()
     });
+    // admin clocked them in, so there are no laptop/face checks; noted as such
+    // so the session isn't flagged for having none (table may not exist yet)
+    const { data: started } = await supabase
+      .from('employee_status').select('session_id').eq('user_id', employeeId).maybeSingle();
+    if (started?.session_id) {
+      await supabase.from('clock_evidence').insert({
+        user_id: employeeId,
+        session_id: started.session_id,
+        kind: 'clock_in',
+        location_status: 'authorised',
+        face_result: 'skipped',
+        user_agent: `Clocked in by the admin (${user.email})`
+      });
+    }
     await refreshStatuses();
   }
 
@@ -692,7 +738,7 @@ function AdminDashboard({ user, onLogout }) {
   }
 
   // Saved session (a row in records)
-  async function saveRecordSession(record, model) {
+  async function saveRecordSession(record, model, reason) {
     const breakTime = model.breaks.length > 0
       ? secondsToHms(sumBreakSeconds(model.breaks))
       : model.breakTotal;
@@ -718,7 +764,8 @@ function AdminDashboard({ user, onLogout }) {
       clock_out: model.clockOut,
       break_time: breakTime,
       hours_worked: hoursWorked,
-      adjusted_by_admin: true
+      adjusted_by_admin: true,
+      edit_reason: reason || null
     }).eq('id', record.id);
     if (error) {
       console.log('Failed to save edit:', error);
@@ -730,7 +777,7 @@ function AdminDashboard({ user, onLogout }) {
 
   // Session still running (employee_status + its breaks).
   // Their screen picks it up straight away through realtime.
-  async function saveLiveSession(employeeId, live, model) {
+  async function saveLiveSession(employeeId, live, model, reason) {
     const clockInAt = clockTimeOnDate(new Date(live.clock_in_at), model.clockIn);
     if (!clockInAt) return 'Pick a clock-in time.';
     if (clockInAt > new Date()) return 'Clock-in time can\u2019t be in the future.';
@@ -756,6 +803,17 @@ function AdminDashboard({ user, onLogout }) {
 
     const { error } = await supabase.from('employee_status').update(update).eq('user_id', employeeId);
     if (error) return 'Could not save. Please try again.';
+    // live sessions aren't in records yet, so the change log entry is added here
+    await supabase.from('change_log').insert({
+      table_name: 'employee_status',
+      record_id: String(employeeId),
+      action: 'update',
+      before: { clock_in_at: live.clock_in_at, break_accum_seconds: live.break_accum_seconds },
+      after: { clock_in_at: update.clock_in_at, break_accum_seconds: update.break_accum_seconds },
+      reason: reason || null,
+      changed_by: user.id,
+      changed_by_email: user.email
+    });
     await refreshStatuses();
     return '';
   }
@@ -788,6 +846,9 @@ function AdminDashboard({ user, onLogout }) {
   function renderHeaderActions(showRefresh = true) {
     return (
       <div className="admin-header-actions">
+        <button className="search-open-btn" onClick={openSearch} title="Find an employee">
+          <SearchIcon width={15} height={15} /> <span>Search</span> <kbd>{SEARCH_HINT}</kbd>
+        </button>
         {showRefresh && renderRefreshButton()}
         <ThemeToggle isDarkMode={isDarkMode} onToggle={() => setIsDarkMode(prev => !prev)} />
       </div>
@@ -813,7 +874,10 @@ function AdminDashboard({ user, onLogout }) {
   // For a finished session (a row in records).
   async function setRecordLocationStatus(recordId, value) {
     setLocationSavingId(recordId);
-    const { error } = await supabase.from('records').update({ location_status: value }).eq('id', recordId);
+    const { error } = await supabase.from('records').update({
+      location_status: value,
+      edit_reason: value === 'authorised' ? 'Location authorised' : value === 'declined' ? 'Location declined' : null
+    }).eq('id', recordId);
     if (error) console.log('Failed to update location status:', error);
     await loadData(true);
     setLocationSavingId(null);
@@ -838,6 +902,13 @@ function AdminDashboard({ user, onLogout }) {
     if (!s || !s.clock_in_at) return null;
     if (s.status !== 'clocked_in' && s.status !== 'on_break') return null;
     return s;
+  }
+
+  // running session's time so far, on the day it started (declined doesn't count)
+  function liveSecondsOn(userId, day) {
+    const live = getLiveSession(userId);
+    if (!live || live.location_status === 'declined' || !isSameDay(new Date(live.clock_in_at), day)) return 0;
+    return getLiveWorkedSeconds(userId);
   }
 
   function isLiveUnauthorised(userId) {
@@ -1182,6 +1253,25 @@ function AdminDashboard({ user, onLogout }) {
 
   return (
     <div className={`admin-layout ${isDarkMode ? 'dark' : ''}`}>
+      {showSearch && (
+        <EmployeeSearch
+          employees={employees}
+          getStatus={getStatus}
+          onClose={() => setShowSearch(false)}
+          onOpen={employee => { setShowSearch(false); setSelectedEmployee(employee); }}
+          onTimesheet={employee => {
+            setShowSearch(false);
+            setTimesheetEmployeeId(employee.id);
+            goToTab('timesheets');
+          }}
+          onActivity={employee => {
+            setShowSearch(false);
+            setActivityUserId(employee.id);
+            setActivityVisit(v => v + 1);
+            goToTab('activity');
+          }}
+        />
+      )}
 
       {/* Employee action modal */}
       {selectedEmployee && (
@@ -1272,6 +1362,16 @@ function AdminDashboard({ user, onLogout }) {
                 className="admin-link-btn"
                 onClick={() => openFullDetails(selectedEmployee)}>
                 View Full Details
+              </button>
+              <button
+                className="admin-link-btn sec-modal-link"
+                onClick={() => {
+                  setActivityUserId(selectedEmployee.id);
+                  setActivityVisit(v => v + 1);
+                  setSelectedEmployee(null);
+                  goToTab('activity');
+                }}>
+                View Activity
               </button>
             </div>
           </div>
@@ -1442,45 +1542,50 @@ function AdminDashboard({ user, onLogout }) {
 
         <div className="sidebar-collapsible">
           <nav className="admin-nav">
-            <button
-              className={`admin-nav-item ${activeTab === 'employees' ? 'active' : ''}`}
-              onClick={() => goToTab('employees')}
-              title={isSidebarCollapsed ? NAV_TITLES.employees : undefined}>
-              <UsersIcon width={17} height={17} /> <span className="nav-label">Employees</span>
-            </button>
-            <button
-              className={`admin-nav-item ${activeTab === 'approvals' ? 'active' : ''}`}
-              onClick={() => goToTab('approvals')}
-              title={isSidebarCollapsed ? NAV_TITLES.approvals : undefined}>
-              <UserIcon width={17} height={17} /> <span className="nav-label">Approvals</span>
-              {pendingUsers.length > 0 && (
-                <span className="admin-nav-badge">{pendingUsers.length}</span>
-              )}
-            </button>
-            <button
-              className={`admin-nav-item ${activeTab === 'timesheets' ? 'active' : ''}`}
-              onClick={() => goToTab('timesheets')}
-              title={adminSettings.locationAlerts && getTotalUnreviewed() > 0 ? 'Clock-ins from an unauthorised location waiting for review' : (isSidebarCollapsed ? 'Timesheets' : undefined)}>
-              <TimesheetIcon width={17} height={17} /> <span className="nav-label">Timesheets</span>
-              {adminSettings.locationAlerts && getTotalUnreviewed() > 0 && (
-                <span className="admin-nav-badge">{getTotalUnreviewed()}</span>
-              )}
-            </button>
-            <button
-              className={`admin-nav-item ${activeTab === 'timeoff' ? 'active' : ''}`}
-              onClick={() => goToTab('timeoff')}
-              title={isSidebarCollapsed ? NAV_TITLES.timeoff : undefined}>
-              <SuitcaseIcon width={17} height={17} /> <span className="nav-label">Time Off</span>
-              {pendingTimeOffIds().length > 0 && (
-                <span className="admin-nav-badge">{pendingTimeOffIds().length}</span>
-              )}
-            </button>
-            <button
-              className={`admin-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
-              onClick={() => goToTab('settings')}
-              title={isSidebarCollapsed ? NAV_TITLES.settings : undefined}>
-              <SettingsIcon width={17} height={17} /> <span className="nav-label">Settings</span>
-            </button>
+            {[
+              { heading: 'Overview', items: [
+                { id: 'employees', label: 'Employees', Icon: UsersIcon },
+                { id: 'review', label: 'Review', Icon: FlagIcon, badge: openReviewCount, badgeTitle: 'Sessions waiting for review' }
+              ] },
+              { heading: 'Manage', items: [
+                { id: 'approvals', label: 'Approvals', Icon: UserIcon, badge: pendingUsers.length },
+                {
+                  id: 'timesheets', label: 'Timesheets', Icon: TimesheetIcon,
+                  badge: adminSettings.locationAlerts ? getTotalUnreviewed() : 0,
+                  badgeTitle: 'Clock-ins from an unauthorised location waiting for review'
+                },
+                { id: 'timeoff', label: 'Time Off', Icon: SuitcaseIcon, badge: pendingTimeOffIds().length },
+                { id: 'devices', label: 'Devices', Icon: LaptopIcon, badge: pendingDeviceCount, badgeTitle: 'Laptops and faces waiting for approval' }
+              ] },
+              { heading: 'Monitoring', items: [
+                { id: 'activity', label: 'Activity', Icon: ActivityIcon }
+              ] },
+              { heading: 'System', items: [
+                { id: 'changelog', label: 'Change log', Icon: HistoryIcon },
+                { id: 'settings', label: 'Settings', Icon: SettingsIcon }
+              ] }
+            ].map(group => (
+              <div className="nav-group" key={group.heading}>
+                <p className="nav-heading">{group.heading}</p>
+                {group.items.map(({ id, label, Icon, badge, badgeTitle }) => (
+                  <button
+                    key={id}
+                    className={`admin-nav-item ${activeTab === id ? 'active' : ''}`}
+                    onClick={() => {
+                      // from the sidebar, Activity starts on "everyone working now"
+                      if (id === 'activity') {
+                        setActivityUserId('');
+                        setActivityVisit(v => v + 1);
+                      }
+                      goToTab(id);
+                    }}
+                    title={badge > 0 && badgeTitle ? badgeTitle : (isSidebarCollapsed ? NAV_TITLES[id] : undefined)}>
+                    <Icon width={17} height={17} /> <span className="nav-label">{label}</span>
+                    {badge > 0 && <span className="admin-nav-badge">{badge}</span>}
+                  </button>
+                ))}
+              </div>
+            ))}
           </nav>
 
           {isSidebarCollapsed && (
@@ -1617,32 +1722,33 @@ function AdminDashboard({ user, onLogout }) {
               {renderHeaderActions()}
             </div>
 
-            {/* Stats Row */}
+            {/* Stats Row: click a card to show just those people */}
             <div className="admin-stats">
-              <div className="admin-stat-card">
-                <p className="admin-stat-label">Total Employees</p>
-                <h2 className="admin-stat-value">{employees.length}</h2>
-              </div>
-              <div className="admin-stat-card">
-                <p className="admin-stat-label">Clocked In</p>
-                <h2 className="admin-stat-value stat-success">{totalClockedIn}</h2>
-              </div>
-              <div className="admin-stat-card">
-                <p className="admin-stat-label">On Break</p>
-                <h2 className="admin-stat-value stat-warning">{totalOnBreak}</h2>
-              </div>
-              <div className="admin-stat-card">
-                <p className="admin-stat-label">Clocked Out</p>
-                <h2 className="admin-stat-value stat-neutral">{totalClockedOut}</h2>
-              </div>
-              <div className="admin-stat-card">
-                <p className="admin-stat-label">On Leave</p>
-                <h2 className="admin-stat-value stat-leave">{totalOnLeave}</h2>
-              </div>
-              <div className="admin-stat-card">
-                <p className="admin-stat-label">Not Clocked In</p>
-                <h2 className="admin-stat-value stat-muted">{totalNotClockedIn}</h2>
-              </div>
+              {[
+                ['all', 'Total Employees', employees.length, ''],
+                ['clocked_in', 'Clocked In', totalClockedIn, 'stat-success'],
+                ['on_break', 'On Break', totalOnBreak, 'stat-warning'],
+                ['clocked_out', 'Clocked Out', totalClockedOut, 'stat-neutral'],
+                ['on_leave', 'On Leave', totalOnLeave, 'stat-leave'],
+                ['not_clocked_in', 'Not Clocked In', totalNotClockedIn, 'stat-muted']
+              ].map(([value, label, count, tone]) => {
+                const active = statusFilter === value && value !== 'all';
+                const pick = () => setStatusFilter(active ? 'all' : value);
+                return (
+                  <div
+                    key={value}
+                    className={`admin-stat-card stat-card-clickable ${active ? 'is-active' : ''}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-pressed={active}
+                    title={value === 'all' ? 'Show everyone' : `Show only ${label.toLowerCase()}`}
+                    onClick={pick}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pick(); } }}>
+                    <p className="admin-stat-label">{label}</p>
+                    <h2 className={`admin-stat-value ${tone}`}>{count}</h2>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Filters */}
@@ -1829,17 +1935,19 @@ function AdminDashboard({ user, onLogout }) {
                         if (!day) return <div key={`blank-${i}`} className="timesheet-day-cell empty" />;
                         const dayRecords = getRecordsForDay(timesheetEmployeeId, day);
                         const hasUnauthorised = dayHasUnauthorised(timesheetEmployeeId, day, dayRecords);
-                        const totalSecs = sumHoursSeconds(dayRecords);
+                        const liveSecs = liveSecondsOn(timesheetEmployeeId, day);
+                        const totalSecs = sumHoursSeconds(dayRecords) + liveSecs;
+                        const hasTime = dayRecords.length > 0 || liveSecs > 0;
                         const isSelected = isSameDay(day, timesheetSelectedDate);
                         const isToday = isSameDay(day, new Date());
 
                         return (
                           <button
                             key={day.toISOString()}
-                            className={`timesheet-day-cell ${dayRecords.length ? 'has-records' : ''} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
+                            className={`timesheet-day-cell ${hasTime ? 'has-records' : ''} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
                             onClick={() => selectTimesheetDay(day)}>
                             <span className="timesheet-day-number">{day.getDate()}</span>
-                            {dayRecords.length > 0 && (
+                            {hasTime && (
                               <span className="timesheet-day-hours">{secondsToHms(totalSecs).slice(0, 5)}</span>
                             )}
                             {hasUnauthorised && <span className="timesheet-day-flag" title="Unauthorised location" />}
@@ -1862,18 +1970,20 @@ function AdminDashboard({ user, onLogout }) {
                       {weekDays.map(day => {
                         const dayRecords = getRecordsForDay(timesheetEmployeeId, day);
                         const hasUnauthorised = dayHasUnauthorised(timesheetEmployeeId, day, dayRecords);
-                        const totalSecs = sumHoursSeconds(dayRecords);
+                        const liveSecs = liveSecondsOn(timesheetEmployeeId, day);
+                        const totalSecs = sumHoursSeconds(dayRecords) + liveSecs;
+                        const hasTime = dayRecords.length > 0 || liveSecs > 0;
                         const isSelected = isSameDay(day, timesheetSelectedDate);
                         const isToday = isSameDay(day, new Date());
 
                         return (
                           <button
                             key={day.toISOString()}
-                            className={`timesheet-week-cell ${dayRecords.length ? 'has-records' : ''} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
+                            className={`timesheet-week-cell ${hasTime ? 'has-records' : ''} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
                             onClick={() => selectTimesheetDay(day)}>
                             <span className="timesheet-week-dayname">{day.toLocaleDateString('en-GB', { weekday: 'short' })}</span>
                             <span className="timesheet-week-daynum">{day.getDate()}</span>
-                            {dayRecords.length > 0 && (
+                            {hasTime && (
                               <span className="timesheet-day-hours">{secondsToHms(totalSecs).slice(0, 5)}</span>
                             )}
                             {hasUnauthorised && <span className="timesheet-day-flag" title="Unauthorised location" />}
@@ -1957,7 +2067,8 @@ function AdminDashboard({ user, onLogout }) {
                                 <SessionTimeline
                                   session={recordToSession(record)}
                                   editable={!monthLocked}
-                                  onSave={model => saveRecordSession(record, model)}
+                                  requireReason
+                                  onSave={(model, reason) => saveRecordSession(record, model, reason)}
                                 />
                               </div>
                             );
@@ -1995,7 +2106,8 @@ function AdminDashboard({ user, onLogout }) {
                               <SessionTimeline
                                 session={liveToSession(live, timesheetEmployeeId)}
                                 editable
-                                onSave={model => saveLiveSession(timesheetEmployeeId, live, model)}
+                                requireReason
+                                onSave={(model, reason) => saveLiveSession(timesheetEmployeeId, live, model, reason)}
                               />
                             </div>
                           )}
@@ -2102,6 +2214,36 @@ function AdminDashboard({ user, onLogout }) {
           </>
         )}
 
+        {activeTab === 'review' && (
+          <AdminReview
+            employees={employees}
+            headerActions={renderHeaderActions(false)}
+            onOpenCountChange={setOpenReviewCount}
+          />
+        )}
+
+        {activeTab === 'devices' && (
+          <AdminDevices
+            employees={employees}
+            headerActions={renderHeaderActions(false)}
+            onPendingCountChange={setPendingDeviceCount}
+          />
+        )}
+
+        {activeTab === 'activity' && (
+          <AdminActivity
+            key={activityVisit}
+            employees={employees}
+            employeeStatuses={employeeStatuses}
+            headerActions={renderHeaderActions(false)}
+            initialUserId={activityUserId}
+          />
+        )}
+
+        {activeTab === 'changelog' && (
+          <AdminChangeLog employees={employees} headerActions={renderHeaderActions(false)} />
+        )}
+
         {/* ===== SETTINGS TAB ===== */}
         {activeTab === 'settings' && (
           <>
@@ -2130,6 +2272,8 @@ function AdminDashboard({ user, onLogout }) {
                 </label>
               </div>
             </div>
+
+            <AdminSecuritySettings />
           </>
         )}
 

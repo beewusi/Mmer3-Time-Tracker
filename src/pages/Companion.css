@@ -1,0 +1,179 @@
+/* Desktop app window (/companion), small fixed-size window */
+.companion,
+.companion.dashboard-layout {
+  display: block;
+  min-height: 100vh;
+  height: auto;
+  overflow: auto;
+  background: var(--gray-50);
+}
+
+.companion-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: var(--navy);
+  color: var(--white);
+  -webkit-app-region: drag;   /* move the window by its top bar */
+}
+
+.companion-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.companion-brand span {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--gray-400);
+}
+
+.companion-signout {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(248, 250, 252, 0.15);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--gray-300);
+  cursor: pointer;
+}
+
+.companion-body {
+  padding: 18px;
+}
+
+.companion-name {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--navy);
+}
+
+.companion-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.companion-status-on { background: var(--success-bg); color: var(--success); }
+.companion-status-break { background: var(--warning-bg); color: var(--warning); }
+.companion-status-off { background: var(--gray-100); color: var(--gray-500); }
+
+.companion-check {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--blue);
+  color: #FFFFFF;
+}
+
+.companion-check div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  font-size: 13px;
+}
+
+.companion-check .btn-primary {
+  width: auto;
+  background: #FFFFFF;
+  color: var(--blue);
+  padding: 8px 14px;
+}
+
+.companion-message {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--navy-700);
+}
+
+.companion-stats {
+  margin-top: 14px;
+  background: #FFFFFF;
+  border: var(--border);
+  border-radius: var(--radius-md);
+}
+
+.companion-stats div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  font-size: 13px;
+  color: var(--gray-600);
+  border-bottom: 1px solid var(--gray-100);
+}
+
+.companion-stats div:last-child {
+  border-bottom: none;
+}
+
+.companion-stats strong {
+  margin-left: auto;
+  color: var(--navy);
+}
+
+.companion-note {
+  margin: 14px 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--gray-500);
+}
+
+.companion-open {
+  width: 100%;
+}
+
+.companion-card {
+  max-width: 420px;
+  margin: 80px auto;
+  padding: 24px;
+  background: #FFFFFF;
+  border: var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--gray-600);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.companion-card .companion-brand {
+  color: var(--navy);
+  margin-bottom: 8px;
+}
+
+.companion-warn {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 12.5px;
+}
+
+.companion-warn p {
+  margin: 0 0 8px;
+}
+
+.companion-warn .sec-btn-secondary {
+  padding: 7px 12px;
+  font-size: 12.5px;
+}

@@ -14,12 +14,20 @@ import AIChatWidget from '../components/AIChatWidget';
 import SessionTimeline from '../components/SessionTimeline';
 import AutoTextarea from '../components/AutoTextarea';
 import ThemeToggle from '../components/ThemeToggle';
+import FaceCheck from '../components/FaceCheck';
+import DevicesSecurity from './DevicesSecurity';
+import MyActivity from './MyActivity';
+import {
+  loadSecuritySettings, getMyFaceProfile, getClockInAssertion, callClockCheck,
+  uploadEvidence, getDeviceKey
+} from '../lib/security';
+import { useSessionWatch, usePresenceChecks, askIdlePermission } from '../lib/useSessionWatch';
 import { PieChart, Pie, Cell, Tooltip } from 'recharts';
 import {
   HourglassIcon, DashboardIcon, TimesheetIcon, BellIcon,
   ClockIcon, CoffeeIcon, CalendarIcon, PinIcon,
   ChevronDownIcon, SuitcaseIcon, AlertIcon, RefreshIcon, HelpIcon, CheckCircleIcon,
-  MenuIcon, XIcon, PanelLeftIcon, LogoutIcon
+  MenuIcon, XIcon, PanelLeftIcon, LogoutIcon, ShieldIcon, ActivityIcon, FaceIcon
 } from '../icons';
 import { loadPref, savePref } from '../lib/prefs';
 
@@ -89,6 +97,34 @@ const EMPLOYEE_FAQ_ITEMS = [
     a: 'Yes, on a computer click the panel icon next to Mmerℇ at the top of the menu to shrink it to icons only. Click the same icon above your name to open it again.'
   },
   {
+    q: 'Why does Clock In ask for my face and Windows Hello / Touch ID?',
+    a: 'So nobody else can clock in for you. Windows Hello or Touch ID shows it’s your own work laptop, and the face check shows it’s you. Set both up once under Devices & Security; your admin approves them before they’re used.'
+  },
+  {
+    q: 'The face check keeps failing. What do I do?',
+    a: 'Face a window or a light, move a little closer, take off anything covering your face and blink normally. After two tries you can still clock in with "Clock in anyway". Your admin will look at it. If it keeps happening, retake your face under Devices & Security.'
+  },
+  {
+    q: 'What is a presence check?',
+    a: 'A few times while you’re clocked in (about four times a day, at random), a blue bar asks you to show your face. You have 5 minutes. A missed check is marked for your admin. Checks don’t come during a break.'
+  },
+  {
+    q: 'What does the desktop app do?',
+    a: 'It runs in the tray while you’re clocked in: it pops up for presence checks, notices when the computer is idle or locked, and takes a few screenshots an hour. Nothing is taken when you’re not clocked in or on a break. You can see everything on My Activity.'
+  },
+  {
+    q: 'Why is my session marked for review?',
+    a: 'Something didn’t add up, for example the face didn’t match, the laptop wasn’t verified, you weren’t on the office network or a presence check was missed. It’s not a penalty: your admin looks at it and accepts or declines it. You can see each one, and any note from your admin, on My Activity.'
+  },
+  {
+    q: 'What if the internet is down when I clock in?',
+    a: 'If Mmerℇ is already open, press Clock In anyway. The time is kept on your laptop and sent as soon as the connection is back, marked as an offline clock-in for your admin. Wait until you’re back online to clock out.'
+  },
+  {
+    q: 'Can I stop the face check?',
+    a: 'Yes. Under Devices & Security, use "Withdraw consent". Your face data and photo are deleted straight away, and your admin will agree another way to confirm your clock-ins.'
+  },
+  {
     q: 'Where can I read how my information is used?',
     a: 'The Privacy Notice and Terms of Use are linked on the sign in and sign up pages.'
   }
@@ -96,7 +132,9 @@ const EMPLOYEE_FAQ_ITEMS = [
 
 // Where things are in the app, for the assistant (not shown on the FAQ page)
 const EMPLOYEE_APP_GUIDE = [
-  'Menu: Dashboard, Timesheet, Time Off, Reminders, FAQ. Profile opens from your name at the bottom of the menu; Sign Out is below it.',
+  'Menu (grouped): Overview — Dashboard, Timesheet, My Activity; Requests — Time Off; Settings — Reminders, Devices & Security; Help — FAQ. Profile opens from your name at the bottom of the menu; Sign Out is below it.',
+  'My Activity: one day at a time — clock-in checks (photo, laptop, face, network), presence checks, screenshots from the desktop app, away time, and anything marked for the admin with its status.',
+  'Devices & Security: register this work laptop (Windows Hello / Touch ID), set up, retake or withdraw the face check, see whether the desktop app is running.',
   'Dashboard: Clock In card (Clock In, Break / Resume, Clock Out, location status), Planned Hours, Worked Hours (today and sessions), upcoming holidays and time off, Activities chart.',
   'Timesheet: Daily, Weekly, Monthly and All Records views. Click a day to see its work and break timeline. Read only for employees.',
   'Time Off: summary of pending, taken this year and next time off; request form with type, dates and reason; "Describe it instead" to fill the form from a sentence; your requests grouped as Pending, Upcoming and History, pending ones can be cancelled.',
@@ -120,7 +158,13 @@ function isCounted(record) {
 }
 
 // tooltip text for the collapsed sidebar
-const NAV_TITLES = { dashboard: 'Dashboard', timesheet: 'Timesheet', timeoff: 'Time Off', reminders: 'Reminders', faq: 'FAQ' };
+const NAV_TITLES = {
+  dashboard: 'Dashboard', timesheet: 'Timesheet', activity: 'My Activity', timeoff: 'Time Off',
+  reminders: 'Reminders', security: 'Devices & Security', faq: 'FAQ'
+};
+
+// clock-outs this soon after clocking in ask first (double tap / wrong button)
+const EARLY_CLOCK_OUT_SECONDS = 5 * 60;
 
 function Dashboard({ user, onLogout }) {
   const [profile, setProfile] = useState(null);
@@ -141,6 +185,15 @@ function Dashboard({ user, onLogout }) {
   const lastRemindersResetForRef = useRef(null);
   // Stops a double-click on Clock Out saving the session twice.
   const clockOutInProgressRef = useRef(false);
+  // Same for Clock In, which now waits on the face and laptop checks.
+  const clockInInProgressRef = useRef(false);
+  const [clockInStep, setClockInStep] = useState('');
+  const [showEarlyClockOut, setShowEarlyClockOut] = useState(false);
+  // face check opened from Clock In; resolves with the result (null = cancelled)
+  const [clockInFaceOpen, setClockInFaceOpen] = useState(false);
+  const faceResolveRef = useRef(null);
+  const [presenceFaceOpen, setPresenceFaceOpen] = useState(false);
+  const [presenceMessage, setPresenceMessage] = useState('');
   const [breakSeconds, setBreakSeconds] = useState(0);
   // finished breaks this session (breakSeconds is only the current break)
   const [breakAccumSeconds, setBreakAccumSeconds] = useState(0);
@@ -335,6 +388,12 @@ function Dashboard({ user, onLogout }) {
   }
 
   async function syncClockStateFromServer() {
+    // an offline clock-in waiting to be sent: the server doesn't know yet
+    try {
+      if (localStorage.getItem(`mmer3-offline-clockin-${user.id}`)) return;
+    } catch {
+      // storage unavailable, carry on
+    }
     const status = await readEmployeeStatus();
     applyServerClockState(status);
   }
@@ -391,6 +450,9 @@ function Dashboard({ user, onLogout }) {
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  useSessionWatch(user, isClockedIn);
+  const { openCheck: presenceCheck, answer: answerPresenceCheck } = usePresenceChecks(user, isClockedIn && !isOnBreak);
 
   async function loadRecords() {
     loadBreaks();
@@ -641,48 +703,182 @@ function Dashboard({ user, onLogout }) {
     }
   }
 
-  async function handleClockIn() {
-    const location = await checkLocation();
+  function askFaceCheck() {
+    return new Promise(resolve => {
+      faceResolveRef.current = resolve;
+      setClockInFaceOpen(true);
+    });
+  }
 
+  function closeClockInFace(result) {
+    setClockInFaceOpen(false);
+    const resolve = faceResolveRef.current;
+    faceResolveRef.current = null;
+    if (resolve) resolve(result);
+  }
+
+  // ---------- offline clock-in ----------
+  // No connection at Clock In: the time is kept on this laptop and sent when
+  // the connection is back (clock-check flags it for the admin).
+  const offlineKey = `mmer3-offline-clockin-${user?.id}`;
+
+  function startOfflineClockIn() {
+    const at = new Date();
+    try {
+      localStorage.setItem(offlineKey, JSON.stringify({ clockInAt: at.toISOString() }));
+    } catch {
+      setReminder('You’re offline and this browser can’t save the clock-in. Try again when the connection is back.');
+      return;
+    }
     setIsClockedIn(true);
     setIsOnBreak(false);
     setSeconds(0);
     setBreakSeconds(0);
-    setClockInTime(dateToHHMM(new Date()));
     setBreakAccumSeconds(0);
-    requestNotificationPermission();
-    // New session, reset the reminder flags.
-    remindersFiredRef.current = {
-      break2h: false,
-      break3h: false,
-      clockOut8h: false,
-      autoClockOut: false
-    };
-
-    // Unauthorised location doesn't block clock-in. It's flagged for the admin
-    // to authorise or decline.
-    if (location === 'unauthorised') {
-      setReminder('You have been clocked in, but your location could not be verified as authorised. This has been flagged for admin review.');
-    }
-
-    // Written to employee_status so the admin sees the clock-in and location
-    // straight away. Reminder-sent flags reset for reminder-sweep.
-    await syncEmployeeStatus({
-      status: 'clocked_in',
-      clock_in_at: new Date().toISOString(),
-      break_started_at: null,
-      break_accum_seconds: 0,
-      location_status: location,
-      break_2h_sent: false,
-      break_3h_sent: false,
-      clock_out_8h_sent: false,
-      auto_clock_out_sent: false
-    });
+    setClockInTime(dateToHHMM(at));
+    remindersFiredRef.current = { break2h: false, break3h: false, clockOut8h: false, autoClockOut: false };
+    setReminder('You’re offline. Your clock-in time is saved on this laptop and will be sent as soon as the connection is back. Your admin will see it was made offline.');
   }
 
-  async function handleClockOut() {
+  useEffect(() => {
+    if (!user) return undefined;
+    let busy = false;
+    const send = async () => {
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(offlineKey) || 'null'); } catch { saved = null; }
+      if (!saved || busy || !navigator.onLine) return;
+      busy = true;
+      try {
+        await callClockCheck('offline-clock-in', { clockInAt: saved.clockInAt, deviceKey: getDeviceKey() });
+        localStorage.removeItem(offlineKey);
+        setReminder('Back online. Your offline clock-in has been sent.');
+        syncClockStateFromServer();
+      } catch (err) {
+        // too old or refused: drop it and say so; network errors: try again later
+        if (navigator.onLine && !/fetch|network/i.test(err.message || '')) {
+          localStorage.removeItem(offlineKey);
+          setReminder(err.message);
+          syncClockStateFromServer();
+        }
+      }
+      busy = false;
+    };
+    send();
+    window.addEventListener('online', send);
+    const t = setInterval(send, 30000);
+    return () => {
+      window.removeEventListener('online', send);
+      clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  async function handleClockIn() {
+    if (clockInInProgressRef.current || isClockedIn) return;
+    if (!navigator.onLine) {
+      startOfflineClockIn();
+      return;
+    }
+    clockInInProgressRef.current = true;
+    // needs the click itself, so before anything is awaited
+    askIdlePermission();
+    requestNotificationPermission();
+
+    try {
+      // Face first. Cancelling it cancels the clock-in. Not set up yet or
+      // switched off = no camera, clock-check flags it if it should.
+      setClockInStep('Getting ready…');
+      const settings = await loadSecuritySettings().catch(() => null);
+      let face = null;
+      if (settings?.face_check_enabled !== false) {
+        const myFace = await getMyFaceProfile().catch(() => null);
+        if (myFace?.status === 'approved') {
+          setClockInStep('Face check…');
+          face = await askFaceCheck();
+          if (!face) return;
+        }
+      }
+
+      setClockInStep('Checking laptop…');
+      const passkey = await getClockInAssertion();
+
+      setClockInStep('Checking location…');
+      const location = await checkLocation();
+
+      setIsClockedIn(true);
+      setIsOnBreak(false);
+      setSeconds(0);
+      setBreakSeconds(0);
+      setClockInTime(dateToHHMM(new Date()));
+      setBreakAccumSeconds(0);
+      // New session, reset the reminder flags.
+      remindersFiredRef.current = {
+        break2h: false,
+        break3h: false,
+        clockOut8h: false,
+        autoClockOut: false
+      };
+
+      // Unauthorised location doesn't block clock-in. It's flagged for the admin
+      // to authorise or decline.
+      if (location === 'unauthorised') {
+        setReminder('You have been clocked in, but your location could not be verified as authorised. This has been flagged for admin review.');
+      }
+
+      // Written to employee_status so the admin sees the clock-in and location
+      // straight away. Reminder-sent flags reset for reminder-sweep.
+      await syncEmployeeStatus({
+        status: 'clocked_in',
+        clock_in_at: new Date().toISOString(),
+        break_started_at: null,
+        break_accum_seconds: 0,
+        location_status: location,
+        break_2h_sent: false,
+        break_3h_sent: false,
+        clock_out_8h_sent: false,
+        auto_clock_out_sent: false
+      });
+
+      // What was checked, sent once the session exists (it gives the session id).
+      // Doesn't hold up the clock-in.
+      setClockInStep('');
+      const photoPath = face?.photoBlob ? await uploadEvidence(user.id, 'clockin', face.photoBlob) : null;
+      callClockCheck('clock-in', {
+        assertion: passkey.assertion,
+        passkeyError: passkey.error,
+        face: face ? { descriptor: face.descriptor || null, blink: face.blink, attempts: face.attempts, noFace: !!face.noFace } : null,
+        photoPath,
+        deviceKey: getDeviceKey(),
+        locationStatus: location
+      }).then(result => {
+        const setupMissing = (result?.flags || []).some(f => f === 'device_unregistered' || f === 'face_not_registered');
+        if (setupMissing && location !== 'unauthorised') {
+          setReminder('You’re clocked in. Finish setting up Devices & Security so your clock-ins don’t need checking by your admin.');
+        }
+      }).catch(err => console.log('Clock-in checks not saved:', err.message));
+    } finally {
+      clockInInProgressRef.current = false;
+      setClockInStep('');
+    }
+  }
+
+  function handleClockOut() {
+    if (clockOutInProgressRef.current) return;
+    if (!navigator.onLine) {
+      setReminder('You’re offline. Clock out once the connection is back, so the session can be saved.');
+      return;
+    }
+    if (seconds < EARLY_CLOCK_OUT_SECONDS) {
+      setShowEarlyClockOut(true);
+      return;
+    }
+    doClockOut();
+  }
+
+  async function doClockOut() {
     if (clockOutInProgressRef.current) return;
     clockOutInProgressRef.current = true;
+    setShowEarlyClockOut(false);
 
     // Save the record before clearing employee_status, otherwise the location
     // is already gone.
@@ -1248,6 +1444,7 @@ function Dashboard({ user, onLogout }) {
     const stats = getActivitiesStats();
     const pendingCount = timeOffRequests.filter(t => t.status === 'pending').length;
     return {
+      now: new Date().toLocaleString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
       faq: `${EMPLOYEE_FAQ_TEXT}\n\nApp guide:\n${EMPLOYEE_APP_GUIDE}`,
       employeeData: `Name: ${getUsername()}. Currently: ${getStatus().text}. ` +
         `Hours worked today: ${Math.floor(stats.workedSeconds / 3600)}h ${Math.floor((stats.workedSeconds % 3600) / 60)}m. ` +
@@ -1340,6 +1537,43 @@ function Dashboard({ user, onLogout }) {
         </div>
       )}
 
+      {showEarlyClockOut && (
+        <div className="popup-overlay">
+          <div className="popup-box">
+            <h3>Clock out already?</h3>
+            <p>You clocked in {Math.max(1, Math.round(seconds / 60))} min ago. Clock out now and end this session?</p>
+            <div className="popup-buttons">
+              <button className="popup-cancel" onClick={() => setShowEarlyClockOut(false)}>Stay clocked in</button>
+              <button className="popup-confirm" onClick={doClockOut}>Clock out</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {clockInFaceOpen && (
+        <FaceCheck
+          mode="clockin"
+          onDone={result => closeClockInFace(result)}
+          onCancel={() => closeClockInFace(null)}
+        />
+      )}
+
+      {presenceFaceOpen && presenceCheck && (
+        <FaceCheck
+          mode="presence"
+          onDone={async result => {
+            setPresenceFaceOpen(false);
+            try {
+              const res = await answerPresenceCheck(presenceCheck, result);
+              setPresenceMessage(res?.result === 'passed' ? 'Presence check done. Thanks.' : 'Presence check sent. It didn’t match, so your admin will take a look.');
+            } catch (err) {
+              setPresenceMessage(err.message || 'The presence check couldn’t be sent.');
+            }
+          }}
+          onCancel={() => setPresenceFaceOpen(false)}
+        />
+      )}
+
       {/* Sidebar (top bar + menu button on smaller screens) */}
       {isNavOpen && <div className="sidebar-backdrop" onClick={() => setIsNavOpen(false)} />}
       <div className={`sidebar ${isNavOpen ? 'nav-open' : ''} ${isSidebarCollapsed ? 'is-collapsed' : ''}`}>
@@ -1365,36 +1599,36 @@ function Dashboard({ user, onLogout }) {
         </div>
         <div className="sidebar-collapsible">
           <nav className="sidebar-nav">
-            <button
-              className={`nav-item ${activePage === 'dashboard' ? 'active' : ''}`}
-              onClick={() => goToPage('dashboard')}
-              title={isSidebarCollapsed ? NAV_TITLES.dashboard : undefined}>
-              <DashboardIcon width={17} height={17} /> <span className="nav-label">Dashboard</span>
-            </button>
-            <button
-              className={`nav-item ${activePage === 'timesheet' ? 'active' : ''}`}
-              onClick={() => goToPage('timesheet')}
-              title={isSidebarCollapsed ? NAV_TITLES.timesheet : undefined}>
-              <TimesheetIcon width={17} height={17} /> <span className="nav-label">Timesheet</span>
-            </button>
-            <button
-              className={`nav-item ${activePage === 'timeoff' ? 'active' : ''}`}
-              onClick={() => goToPage('timeoff')}
-              title={isSidebarCollapsed ? NAV_TITLES.timeoff : undefined}>
-              <SuitcaseIcon width={17} height={17} /> <span className="nav-label">Time Off</span>
-            </button>
-            <button
-              className={`nav-item ${activePage === 'reminders' ? 'active' : ''}`}
-              onClick={() => goToPage('reminders')}
-              title={isSidebarCollapsed ? NAV_TITLES.reminders : undefined}>
-              <BellIcon width={17} height={17} /> <span className="nav-label">Reminders</span>
-            </button>
-            <button
-              className={`nav-item ${activePage === 'faq' ? 'active' : ''}`}
-              onClick={() => goToPage('faq')}
-              title={isSidebarCollapsed ? NAV_TITLES.faq : undefined}>
-              <HelpIcon width={17} height={17} /> <span className="nav-label">FAQ</span>
-            </button>
+            {[
+              { heading: 'Overview', items: [
+                { id: 'dashboard', label: 'Dashboard', Icon: DashboardIcon },
+                { id: 'timesheet', label: 'Timesheet', Icon: TimesheetIcon },
+                { id: 'activity', label: 'My Activity', Icon: ActivityIcon }
+              ] },
+              { heading: 'Requests', items: [
+                { id: 'timeoff', label: 'Time Off', Icon: SuitcaseIcon }
+              ] },
+              { heading: 'Settings', items: [
+                { id: 'reminders', label: 'Reminders', Icon: BellIcon },
+                { id: 'security', label: 'Devices & Security', Icon: ShieldIcon }
+              ] },
+              { heading: 'Help', items: [
+                { id: 'faq', label: 'FAQ', Icon: HelpIcon }
+              ] }
+            ].map(group => (
+              <div className="nav-group" key={group.heading}>
+                <p className="nav-heading">{group.heading}</p>
+                {group.items.map(({ id, label, Icon }) => (
+                  <button
+                    key={id}
+                    className={`nav-item ${activePage === id ? 'active' : ''}`}
+                    onClick={() => goToPage(id)}
+                    title={isSidebarCollapsed ? NAV_TITLES[id] : undefined}>
+                    <Icon width={17} height={17} /> <span className="nav-label">{label}</span>
+                  </button>
+                ))}
+              </div>
+            ))}
           </nav>
           {isSidebarCollapsed && (
             <button
@@ -1427,6 +1661,22 @@ function Dashboard({ user, onLogout }) {
 
       {/* Main Content */}
       <div className="main-content">
+
+        {presenceCheck && !presenceFaceOpen && (
+          <div className="presence-banner">
+            <FaceIcon width={18} height={18} />
+            <span>
+              <strong>Presence check.</strong> Show your face before {new Date(presenceCheck.expires_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.
+            </span>
+            <button className="btn-primary" onClick={() => { setPresenceMessage(''); setPresenceFaceOpen(true); }}>Start</button>
+          </div>
+        )}
+        {presenceMessage && !presenceCheck && (
+          <div className="presence-banner presence-banner-done">
+            <span>{presenceMessage}</span>
+            <button className="presence-banner-close" onClick={() => setPresenceMessage('')} aria-label="Dismiss"><XIcon width={14} height={14} /></button>
+          </div>
+        )}
 
         {/* ===== DASHBOARD PAGE ===== */}
         {activePage === 'dashboard' && (
@@ -1480,14 +1730,14 @@ function Dashboard({ user, onLogout }) {
                   <div className="break-timer"><CoffeeIcon width={13} height={13} /> Break: {formatTime(breakSeconds)}</div>
                 )}
                 <div className="card-buttons">
-                  <button className="btn-clockin" onClick={handleClockIn} disabled={isClockedIn}>
-                    Clock In
+                  <button className="btn-clockin" onClick={handleClockIn} disabled={isClockedIn || !!clockInStep}>
+                    {clockInStep || 'Clock In'}
                   </button>
                   <button className="btn-break" onClick={handleBreak} disabled={!isClockedIn}>
                     {isOnBreak ? 'Resume' : 'Break'}
                   </button>
                   {!isOnBreak && isClockedIn && (
-                    <button className="btn-clockout" onClick={handleClockOut}>Clock Out</button>
+                    <button className="btn-clockout" onClick={handleClockOut} disabled={showEarlyClockOut}>Clock Out</button>
                   )}
                 </div>
               </div>
@@ -1713,17 +1963,20 @@ function Dashboard({ user, onLogout }) {
                   {buildMonthCells(timesheetMonthDate).map((day, i) => {
                     if (!day) return <div key={`blank-${i}`} className="timesheet-day-cell empty" />;
                     const dayRecs = getRecordsForDay(day);
-                    const totalSecs = sumRecordsSeconds(dayRecs);
+                    // the running session counts on today's cell too
+                    const liveSecs = isClockedIn && locationStatus !== 'declined' && isSameCalendarDay(day, new Date()) ? seconds : 0;
+                    const totalSecs = sumRecordsSeconds(dayRecs) + liveSecs;
+                    const hasTime = dayRecs.length > 0 || liveSecs > 0;
                     const isSelected = isSameCalendarDay(day, timesheetSelectedDate);
                     const isToday = isSameCalendarDay(day, new Date());
 
                     return (
                       <button
                         key={day.toISOString()}
-                        className={`timesheet-day-cell ${dayRecs.length ? 'has-records' : ''} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
+                        className={`timesheet-day-cell ${hasTime ? 'has-records' : ''} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
                         onClick={() => selectTimesheetDay(day)}>
                         <span className="timesheet-day-number">{day.getDate()}</span>
-                        {dayRecs.length > 0 && (
+                        {hasTime && (
                           <span className="timesheet-day-hours">{formatTime(totalSecs).slice(0, 5)}</span>
                         )}
                       </button>
@@ -1744,18 +1997,21 @@ function Dashboard({ user, onLogout }) {
                 <div className="timesheet-week-card">
                   {weekDays.map(day => {
                     const dayRecs = getRecordsForDay(day);
-                    const totalSecs = sumRecordsSeconds(dayRecs);
+                    // the running session counts on today's cell too
+                    const liveSecs = isClockedIn && locationStatus !== 'declined' && isSameCalendarDay(day, new Date()) ? seconds : 0;
+                    const totalSecs = sumRecordsSeconds(dayRecs) + liveSecs;
+                    const hasTime = dayRecs.length > 0 || liveSecs > 0;
                     const isSelected = isSameCalendarDay(day, timesheetSelectedDate);
                     const isToday = isSameCalendarDay(day, new Date());
 
                     return (
                       <button
                         key={day.toISOString()}
-                        className={`timesheet-week-cell ${dayRecs.length ? 'has-records' : ''} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
+                        className={`timesheet-week-cell ${hasTime ? 'has-records' : ''} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
                         onClick={() => selectTimesheetDay(day)}>
                         <span className="timesheet-week-dayname">{day.toLocaleDateString('en-GB', { weekday: 'short' })}</span>
                         <span className="timesheet-week-daynum">{day.getDate()}</span>
-                        {dayRecs.length > 0 && (
+                        {hasTime && (
                           <span className="timesheet-day-hours">{formatTime(totalSecs).slice(0, 5)}</span>
                         )}
                       </button>
@@ -2207,6 +2463,10 @@ function Dashboard({ user, onLogout }) {
             </div>
           </div>
         )}
+
+        {activePage === 'security' && <DevicesSecurity user={user} />}
+
+        {activePage === 'activity' && <MyActivity user={user} />}
 
         {/* ===== PROFILE PAGE ===== */}
         {activePage === 'profile' && (

@@ -1,0 +1,224 @@
+.search-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 12vh 16px 16px;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.search-box {
+  width: 560px;
+  max-width: 100%;
+  background: #FFFFFF;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-elevated);
+  overflow: hidden;
+}
+
+.search-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--gray-100);
+  color: var(--gray-400);
+}
+
+.search-input-row input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--navy);
+  background: transparent;
+}
+
+.search-box kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  margin: 0 2px;
+  border: 1px solid var(--gray-200);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--gray-500);
+  background: var(--gray-50);
+}
+
+.search-results {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.search-results li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.search-results li.is-active {
+  background: var(--blue-50);
+}
+
+.search-avatar {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--navy);
+  color: #FFFFFF;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.search-who strong {
+  font-size: 14px;
+  color: var(--navy);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-who span {
+  font-size: 12px;
+  color: var(--gray-500);
+}
+
+.search-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+}
+
+.search-results li.is-active .search-actions {
+  opacity: 1;
+}
+
+.search-actions button {
+  border: 1px solid var(--gray-200);
+  background: #FFFFFF;
+  color: var(--navy-700);
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.search-actions button:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.search-empty {
+  margin: 0;
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--gray-500);
+}
+
+.search-foot {
+  margin: 0;
+  padding: 9px 16px;
+  border-top: 1px solid var(--gray-100);
+  font-size: 11.5px;
+  color: var(--gray-400);
+}
+
+/* header button that opens it */
+.search-open-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 8px 12px;
+  background: #FFFFFF;
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-sm);
+  color: var(--gray-500);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.search-open-btn:hover {
+  border-color: var(--gray-400);
+}
+
+.search-open-btn kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--gray-200);
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 11px;
+  background: var(--gray-50);
+}
+
+@media (max-width: 600px) {
+  .search-open-btn span,
+  .search-open-btn kbd {
+    display: none;
+  }
+  .search-actions {
+    opacity: 1;
+  }
+}
+
+/* dark */
+.admin-layout.dark .search-box {
+  background: var(--navy-700);
+}
+
+.admin-layout.dark .search-input-row,
+.admin-layout.dark .search-foot {
+  border-color: rgba(248, 250, 252, 0.08);
+}
+
+.admin-layout.dark .search-input-row input,
+.admin-layout.dark .search-who strong {
+  color: var(--white);
+}
+
+.admin-layout.dark .search-results li.is-active {
+  background: rgba(248, 250, 252, 0.06);
+}
+
+.admin-layout.dark .search-box kbd,
+.admin-layout.dark .search-open-btn kbd {
+  background: rgba(248, 250, 252, 0.06);
+  border-color: rgba(248, 250, 252, 0.15);
+  color: var(--gray-300);
+}
+
+.admin-layout.dark .search-actions button,
+.admin-layout.dark .search-open-btn {
+  background: transparent;
+  border-color: rgba(248, 250, 252, 0.15);
+  color: var(--gray-300);
+}
+
+.admin-layout.dark .search-avatar {
+  background: var(--blue);
+}
