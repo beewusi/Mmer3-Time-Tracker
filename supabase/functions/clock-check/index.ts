@@ -106,13 +106,14 @@ function validDescriptor(d: unknown): d is number[] {
 
 // Is this person in the office? Either the internet address is one of the
 // office's, or the desktop app (heard from in the last 10 minutes) is on one
-// of the office's Wi-Fi routers. Routers match on the first five parts of
-// their ID, so the 2.4 and 5 GHz sides of one router count as the same.
+// of the office's Wi-Fi routers (learned per network, see below). Routers
+// match on the first five parts of their ID, so the 2.4 and 5 GHz sides of
+// one router count as the same.
 // onOffice: true / false / null (nothing to go on).
 // deno-lint-ignore no-explicit-any
 async function officeCheck(db: any, userId: string, ip: string | null) {
   const [{ data: networks }, { data: routers }, { data: beat }] = await Promise.all([
-    db.from('office_networks').select('id, ip'),
+    db.from('office_networks').select('id, ip, label'),
     db.from('office_routers').select('router'),
     db.from('heartbeats').select('wifi_name, wifi_router, desktop_seen_at').eq('user_id', userId).maybeSingle()
   ]);
@@ -122,6 +123,12 @@ async function officeCheck(db: any, userId: string, ip: string | null) {
   const wifiName: string | null = desktopRecent ? beat?.wifi_name ?? null : null;
   const sameRouter = (a: string, b: string) => a.slice(0, 14) === b.slice(0, 14);
   const routerMatch = router && routers?.length ? routers.some((r: { router: string }) => sameRouter(r.router, router)) : null;
+  // on the office address with the desktop app: remember this router for
+  // that network, so it still counts after the address changes
+  if (ipMatch && router && !routerMatch) {
+    await db.from('office_routers')
+      .upsert({ router, network_id: ipMatch.id, label: wifiName || ipMatch.label }, { onConflict: 'router', ignoreDuplicates: true });
+  }
   const ipKnown = !!(networks?.length && ip);
   let onOffice: boolean | null = null;
   if (ipMatch || routerMatch === true) onOffice = true;

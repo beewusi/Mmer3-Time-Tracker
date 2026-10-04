@@ -688,7 +688,7 @@
 /* My Activity day picker: same as the Timesheet one; no going past today */
 .act-day-nav .timesheet-month-btn:disabled { opacity: 0.4; cursor: default; }
 
-/* Settings: office Wi-Fi routers */
+/* Settings: office networks (rename/remove, recently used list) */
 .sec-router-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
 .sec-router-row {
   display: flex;
@@ -707,3 +707,4 @@
 .admin-layout.dark .sec-router-row { color: var(--white); border-color: rgba(248, 250, 252, 0.15); }
 .admin-layout.dark .sec-router-row em,
 .admin-layout.dark .sec-router-caption { color: var(--gray-400); }
+.sec-row-actions { display: flex; gap: 12px; align-items: center; flex-shrink: 0; }

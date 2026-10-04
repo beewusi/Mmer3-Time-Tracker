@@ -14,7 +14,7 @@ const {
 const path = require('path');
 const fs = require('fs');
 const { execFile } = require('child_process');
-const { normaliseRouter, parseWindows, parseMac } = require('./wifi');
+const { normaliseRouter, parseWindows, parseMac, parseMacScript, MAC_ASK_LOCATION, MAC_READ_WIFI } = require('./wifi');
 
 // config.json sits next to the app's files after install (resources folder),
 // so the site address can be changed without rebuilding
@@ -196,8 +196,12 @@ ipcMain.handle('show-window', (e) => { if (fromUs(e)) showWindow(); });
 // Wi-Fi name, a second check that someone is in the office. Asked from the
 // system's own tools; null if not on Wi-Fi or the system won't say.
 function run(cmd, args) {
+  return runLong(cmd, args, 4000);
+}
+
+function runLong(cmd, args, timeout) {
   return new Promise(resolve => {
-    execFile(cmd, args, { timeout: 4000, windowsHide: true }, (err, stdout) => resolve(err ? '' : String(stdout)));
+    execFile(cmd, args, { timeout, windowsHide: true }, (err, stdout) => resolve(err ? '' : String(stdout)));
   });
 }
 
@@ -212,7 +216,11 @@ async function readWifi() {
   if (process.platform === 'darwin') {
     const summary = await run('ipconfig', ['getsummary', 'en0']);
     const needName = !/\bSSID : (?!<redacted>)./.test(summary);
-    return parseMac(summary, needName ? await run('networksetup', ['-getairportnetwork', 'en0']) : '');
+    const found = parseMac(summary, needName ? await run('networksetup', ['-getairportnetwork', 'en0']) : '');
+    if (found.router) return found;
+    // hidden there: ask the Wi-Fi directly (works once Location is allowed)
+    const direct = parseMacScript(await run('osascript', ['-l', 'JavaScript', '-e', MAC_READ_WIFI]));
+    return { name: found.name || direct.name, router: direct.router };
   }
   return {
     name: (await run('iwgetid', ['-r'])).trim().slice(0, 64) || null,
@@ -293,6 +301,9 @@ app.whenReady().then(async () => {
   if (process.platform === 'darwin') {
     // asks once; the Mac remembers the answer
     try { await systemPreferences.askForMediaAccess('camera'); } catch { /* older macOS */ }
+    // Location, so the Mac shows the Wi-Fi router's ID (not waited for)
+    runLong('osascript', ['-l', 'JavaScript', '-e', MAC_ASK_LOCATION], 20000)
+      .then(out => console.log('Location status', out.trim()));
   }
 
   // start with the laptop, hidden in the tray

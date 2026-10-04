@@ -30,4 +30,38 @@ function parseMac(summary, airport = '') {
   return { name, router: normaliseRouter(router) };
 }
 
-module.exports = { normaliseRouter, parseWindows, parseMac };
+// Mac: small scripts run with the Mac's own script runner (osascript), which
+// can use the system's Location and Wi-Fi parts directly. Run from Mmer3, so
+// the Mac asks "Mmer3 would like to use your location" once.
+// Asks for Location, waits a few seconds for the answer, prints the status
+// (0 not asked yet, 1 restricted, 2 denied, 3/4 allowed).
+const MAC_ASK_LOCATION = `
+ObjC.import('CoreLocation');
+ObjC.import('Foundation');
+var m = $.CLLocationManager.alloc.init;
+m.requestWhenInUseAuthorization;
+m.startUpdatingLocation;
+$.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(10));
+m.stopUpdatingLocation;
+String($.CLLocationManager.authorizationStatus);
+`;
+
+// The router ID (and name) straight from the Wi-Fi; empty if the Mac hides it.
+const MAC_READ_WIFI = `
+ObjC.import('CoreWLAN');
+var i = $.CWWiFiClient.sharedWiFiClient.interface;
+var out = '';
+if (i && !i.isNil()) {
+  var b = i.bssid, s = i.ssid;
+  out = (b && !b.isNil() ? b.js : '') + '|' + (s && !s.isNil() ? s.js : '');
+}
+out;
+`;
+
+// "6c:5a:b0:9e:1f:a4|Office" -> { router, name }
+function parseMacScript(out) {
+  const [router, ...rest] = String(out || '').trim().split('|');
+  return { router: normaliseRouter(router), name: cleanName(rest.join('|')) };
+}
+
+module.exports = { normaliseRouter, parseWindows, parseMac, parseMacScript, MAC_ASK_LOCATION, MAC_READ_WIFI };

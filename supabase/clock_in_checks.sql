@@ -952,9 +952,9 @@ end $$;
 
 -- ---------- office Wi-Fi routers (4 Oct) ----------
 -- The router's own ID (BSSID), read by the desktop app. It stays the same
--- when the office's internet address changes, so it's the main way to tell
--- someone is in the office; the address list above still counts too.
--- Added by the admin from the routers the desktop app has seen.
+-- when the office's internet address changes. Not shown to the admin: each
+-- router is tied to one office network and learned by itself (clock-ins on
+-- that network's address, or when the admin adds the network).
 create table if not exists public.office_routers (
   id uuid primary key default gen_random_uuid(),
   label text not null,
@@ -971,3 +971,9 @@ create policy "office_routers_admin_all" on public.office_routers
 alter table public.heartbeats add column if not exists wifi_router text;
 alter table public.clock_evidence add column if not exists wifi_router text;
 alter table public.devices add column if not exists registered_router text;
+
+-- routers belong to an office network; removing the network removes them
+alter table public.office_routers add column if not exists network_id uuid
+  references public.office_networks(id) on delete cascade;
+-- routers added by hand before this (no network) aren't used any more
+delete from public.office_routers where network_id is null;
