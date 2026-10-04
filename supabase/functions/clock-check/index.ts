@@ -104,6 +104,38 @@ function validDescriptor(d: unknown): d is number[] {
   return Array.isArray(d) && d.length === 128 && d.every(n => typeof n === 'number' && Number.isFinite(n));
 }
 
+// Is this person in the office? Either the internet address is one of the
+// office's, or the desktop app (heard from in the last 10 minutes) is on one
+// of the office's Wi-Fi routers. Routers match on the first five parts of
+// their ID, so the 2.4 and 5 GHz sides of one router count as the same.
+// onOffice: true / false / null (nothing to go on).
+// deno-lint-ignore no-explicit-any
+async function officeCheck(db: any, userId: string, ip: string | null) {
+  const [{ data: networks }, { data: routers }, { data: beat }] = await Promise.all([
+    db.from('office_networks').select('id, ip'),
+    db.from('office_routers').select('router'),
+    db.from('heartbeats').select('wifi_name, wifi_router, desktop_seen_at').eq('user_id', userId).maybeSingle()
+  ]);
+  const ipMatch = networks?.length && ip ? networks.find((n: { ip: string }) => n.ip === ip) ?? null : null;
+  const desktopRecent = !!beat?.desktop_seen_at && Date.now() - new Date(beat.desktop_seen_at).getTime() < 10 * 60 * 1000;
+  const router: string | null = desktopRecent ? beat?.wifi_router ?? null : null;
+  const wifiName: string | null = desktopRecent ? beat?.wifi_name ?? null : null;
+  const sameRouter = (a: string, b: string) => a.slice(0, 14) === b.slice(0, 14);
+  const routerMatch = router && routers?.length ? routers.some((r: { router: string }) => sameRouter(r.router, router)) : null;
+  const ipKnown = !!(networks?.length && ip);
+  let onOffice: boolean | null = null;
+  if (ipMatch || routerMatch === true) onOffice = true;
+  else if (ipKnown || routerMatch === false) onOffice = false;
+  return {
+    onOffice,
+    networkId: ipMatch?.id ?? null,
+    onOfficeAddress: ipKnown ? !!ipMatch : null,
+    router,
+    wifiName,
+    anyOfficeSetUp: !!(networks?.length || routers?.length)
+  };
+}
+
 // refused, with a code the app can act on (e.g. open Devices & Security)
 function blocked(code: string, message: string) {
   return json({ error: message, code, blocked: true }, 403);
@@ -220,8 +252,8 @@ Deno.serve(async (req: Request) => {
       // on an office network: approved straight away. Anywhere else: waits
       // for the admin (their hours are held until then).
       const ip = trustedIp(req);
-      const { data: networks } = await db.from('office_networks').select('ip');
-      const onOffice = !!ip && (networks ?? []).some(n => n.ip === ip);
+      const office = await officeCheck(db, user.id, ip);
+      const onOffice = office.onOffice === true;
 
       const { data: device, error } = await db.from('devices').insert({
         user_id: user.id,
@@ -233,6 +265,7 @@ Deno.serve(async (req: Request) => {
         device_key: deviceKey,
         synced: credentialBackedUp,
         registered_ip: ip ?? callerIp(req),
+        registered_router: office.router,
         status: onOffice ? 'approved' : 'pending',
         approved_at: onOffice ? new Date().toISOString() : null,
         approved_how: onOffice ? 'office_network' : null
@@ -374,40 +407,24 @@ Deno.serve(async (req: Request) => {
         }
       }
 
-      // office network: internet address, and the Wi-Fi name if the desktop
-      // app is running. Blocks only when Settings says office only.
+      // office: internet address or the desktop app's Wi-Fi router. Blocks
+      // only when Settings says office only.
       const ip = trustedIp(req);
-      let networkId: string | null = null;
-      let onOfficeNetwork: boolean | null = null;
-      const { data: networks } = await db.from('office_networks').select('id, label, ip');
-      if (networks?.length && ip) {
-        const match = networks.find(n => n.ip === ip);
-        networkId = match?.id ?? null;
-        onOfficeNetwork = !!match;
-      }
-      let wifiName: string | null = null;
-      let onOfficeWifi: boolean | null = null;
-      const { data: beat } = await db
-        .from('heartbeats').select('wifi_name, desktop_seen_at').eq('user_id', user.id).maybeSingle();
-      if (beat?.desktop_seen_at && Date.now() - new Date(beat.desktop_seen_at).getTime() < 10 * 60 * 1000) {
-        wifiName = beat.wifi_name ?? null;
-        const officeWifi: string[] = settings?.office_wifi_names ?? [];
-        if (wifiName && officeWifi.length) onOfficeWifi = officeWifi.includes(wifiName);
-      }
+      const office = await officeCheck(db, user.id, ip);
+      const networkId = office.networkId;
+      const onOfficeNetwork = office.onOffice;
+      const wifiName = office.wifiName;
       const outageToday = settings?.network_outage_on === todayGhana();
-      const offNetwork = onOfficeNetwork === false || onOfficeWifi === false;
-      if (settings?.network_mode === 'office_only' && !outageToday && onOfficeNetwork !== true) {
-        if (!networks?.length) {
+      if (settings?.network_mode === 'office_only' && !outageToday && office.onOffice !== true) {
+        if (!office.anyOfficeSetUp) {
           return blocked('OFF_NETWORK', 'Clocking in is set to the office network only, but no office network has been added yet. Ask your admin.');
         }
-        if (onOfficeNetwork === null || offNetwork) {
-          return blocked('OFF_NETWORK', 'You’re not on the office network, so you can’t clock in from here. Connect to the office network and try again.');
-        }
+        return blocked('OFF_NETWORK', 'You’re not on the office network, so you can’t clock in from here. Connect to the office Wi-Fi (with the Mmerℇ desktop app running) and try again.');
       }
-      if (!outageToday && offNetwork) {
+      if (!outageToday && office.onOffice === false) {
         flag('off_network', 'low', {
-          ip: onOfficeNetwork === false ? ip : undefined,
-          wifi: onOfficeWifi === false ? wifiName : undefined
+          ip: office.onOfficeAddress === false ? (ip ?? callerIp(req)) : undefined,
+          wifi: office.router ? `${office.wifiName ?? 'Wi-Fi'} (${office.router})` : undefined
         });
       }
 
@@ -469,7 +486,8 @@ Deno.serve(async (req: Request) => {
         blink_passed: typeof face.blink === 'boolean' ? face.blink : null,
         photo_path: photoPath,
         user_agent: (body.clockInAt ? `Offline clock-in, sent ${new Date().toISOString()} · ` : '') + (req.headers.get('user-agent') ?? '').slice(0, 260),
-        wifi_name: wifiName
+        wifi_name: wifiName,
+        wifi_router: office.router
       });
 
       if (flags.length) {

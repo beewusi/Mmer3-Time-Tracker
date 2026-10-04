@@ -164,40 +164,9 @@
 }
 
 /* ---------- My Activity ---------- */
-.act-day-nav {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: #FFFFFF;
-  border: var(--border);
-  border-radius: 999px;
-  padding: 4px;
-}
 
-.act-day-nav span {
-  min-width: 96px;
-  text-align: center;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--navy);
-}
 
-.act-day-nav button {
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 50%;
-  background: var(--gray-100);
-  color: var(--navy);
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-}
 
-.act-day-nav button:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
 
 .act-stats {
   display: grid;
@@ -345,21 +314,8 @@
   display: flex;
 }
 
-.dashboard-layout.dark .act-day-nav,
-.dashboard-layout.dark .act-stat {
-  background: var(--navy-700);
-  border-color: rgba(248, 250, 252, 0.1);
-}
 
-.dashboard-layout.dark .act-day-nav span,
-.dashboard-layout.dark .act-stat strong {
-  color: var(--white);
-}
 
-.dashboard-layout.dark .act-day-nav button {
-  background: rgba(248, 250, 252, 0.08);
-  color: var(--white);
-}
 
 .dashboard-layout.dark .act-stat span,
 .dashboard-layout.dark .act-shot {
@@ -584,17 +540,10 @@
 /* admin dark */
 .admin-layout.dark .reminder-item,
 .admin-layout.dark .act-stat,
-.admin-layout.dark .act-day-nav {
-  background: var(--navy-700);
-  border-color: rgba(248, 250, 252, 0.1);
-}
 
 .admin-layout.dark .reminder-info h3,
 .admin-layout.dark .reminders-subheading,
 .admin-layout.dark .act-stat strong,
-.admin-layout.dark .act-day-nav span {
-  color: var(--white);
-}
 
 .admin-layout.dark .reminder-info p,
 .admin-layout.dark .act-stat span,
@@ -603,10 +552,6 @@
   color: var(--gray-400);
 }
 
-.admin-layout.dark .act-day-nav button {
-  background: rgba(248, 250, 252, 0.08);
-  color: var(--white);
-}
 
 .admin-layout.dark .review-photo,
 .admin-layout.dark .act-thumb {
@@ -739,3 +684,26 @@
 .admin-layout.dark .sec-cell-note { color: var(--gray-400); }
 
 .sec-network-mode { margin-bottom: var(--space-4); }
+
+/* My Activity day picker: same as the Timesheet one; no going past today */
+.act-day-nav .timesheet-month-btn:disabled { opacity: 0.4; cursor: default; }
+
+/* Settings: office Wi-Fi routers */
+.sec-router-list { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.sec-router-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  color: var(--navy);
+}
+.sec-router-row em { font-style: normal; color: var(--gray-500); }
+.sec-router-seen .sec-router-row { border-style: dashed; }
+.sec-router-caption { margin: 8px 0 0; font-size: 12px; color: var(--gray-500); }
+.admin-layout.dark .sec-router-row { color: var(--white); border-color: rgba(248, 250, 252, 0.15); }
+.admin-layout.dark .sec-router-row em,
+.admin-layout.dark .sec-router-caption { color: var(--gray-400); }

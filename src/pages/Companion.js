@@ -116,18 +116,39 @@ function Companion({ user, onLogout }) {
     desktop?.setStatus?.(working ? 'working' : live ? 'break' : 'off');
   }, [working, live]);
 
-  // ---------- heartbeat + away time ----------
+  // Mac: the system only shows the Wi-Fi details to apps allowed Location,
+  // and the app only shows up in that list once it has asked. Asked once;
+  // the position itself isn't used or saved.
   useEffect(() => {
-    if (!live || !desktop) return undefined;
+    if (desktop?.platform !== 'darwin' || !navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(() => {}, () => {}, { timeout: 15000, maximumAge: 3600000 });
+  }, []);
+
+  // ---------- heartbeat: whenever the app is running and signed in ----------
+  // (the Wi-Fi router is needed before clocking in too: registering the
+  // laptop and clocking in check it)
+  useEffect(() => {
+    if (!desktop) return undefined;
     const beat = async () => {
-      const wifi = desktop.getWifiName ? await desktop.getWifiName().catch(() => null) : null;
+      let wifi = null;
+      if (desktop.getWifi) wifi = await desktop.getWifi().catch(() => null);
+      else if (desktop.getWifiName) wifi = { name: await desktop.getWifiName().catch(() => null), router: null };
       await supabase.from('heartbeats').upsert({
-        user_id: user.id, source: 'desktop', idle_state: idleRef.current.state, wifi_name: wifi
+        user_id: user.id,
+        source: 'desktop',
+        idle_state: idleRef.current.state,
+        wifi_name: wifi?.name ?? null,
+        wifi_router: wifi?.router ?? null
       }).then(() => {}, () => {});
     };
     beat();
     const t = setInterval(beat, HEARTBEAT_MS);
+    return () => clearInterval(t);
+  }, [user.id]);
 
+  // ---------- away time, while clocked in ----------
+  useEffect(() => {
+    if (!live || !desktop) return undefined;
     const checkIdle = async () => {
       const info = await desktop.getIdle();
       const state = info.locked ? 'locked' : info.idleSeconds >= IDLE_AFTER_SECONDS ? 'idle' : 'active';
@@ -144,7 +165,6 @@ function Companion({ user, onLogout }) {
     const i = setInterval(checkIdle, IDLE_POLL_MS);
     const off = desktop.onPower?.(evt => { if (evt === 'unlock-screen' || evt === 'resume') checkIdle(); });
     return () => {
-      clearInterval(t);
       clearInterval(i);
       if (off) off();
     };

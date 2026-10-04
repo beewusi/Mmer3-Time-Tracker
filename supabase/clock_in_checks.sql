@@ -949,3 +949,25 @@ begin
   exception when duplicate_object then null;
   end;
 end $$;
+
+-- ---------- office Wi-Fi routers (4 Oct) ----------
+-- The router's own ID (BSSID), read by the desktop app. It stays the same
+-- when the office's internet address changes, so it's the main way to tell
+-- someone is in the office; the address list above still counts too.
+-- Added by the admin from the routers the desktop app has seen.
+create table if not exists public.office_routers (
+  id uuid primary key default gen_random_uuid(),
+  label text not null,
+  router text not null unique,          -- aa:bb:cc:dd:ee:ff
+  created_at timestamptz not null default now()
+);
+alter table public.office_routers enable row level security;
+drop policy if exists "office_routers_admin_all" on public.office_routers;
+create policy "office_routers_admin_all" on public.office_routers
+  for all to authenticated
+  using ((auth.jwt() ->> 'email') = 'admin@mmer3.com')
+  with check ((auth.jwt() ->> 'email') = 'admin@mmer3.com');
+
+alter table public.heartbeats add column if not exists wifi_router text;
+alter table public.clock_evidence add column if not exists wifi_router text;
+alter table public.devices add column if not exists registered_router text;

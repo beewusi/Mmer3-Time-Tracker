@@ -116,10 +116,10 @@ function MyActivity({ user, userId, admin = false, heading, headerActions, picke
   const nothing = !loading && !evidence.length && !checks.length && !shots.length && !away.length && !flags.length;
 
   const dayNav = (
-    <div className="act-day-nav">
-      <button onClick={() => shiftDay(-1)} aria-label="Previous day">‹</button>
-      <span>{isToday ? 'Today' : day.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
-      <button onClick={() => shiftDay(1)} disabled={isToday} aria-label="Next day">›</button>
+    <div className="timesheet-month-nav act-day-nav">
+      <button className="timesheet-month-btn" onClick={() => shiftDay(-1)} aria-label="Previous day">‹</button>
+      <span className="timesheet-month-label">{isToday ? 'Today' : day.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</span>
+      <button className="timesheet-month-btn" onClick={() => shiftDay(1)} disabled={isToday} aria-label="Next day">›</button>
     </div>
   );
 

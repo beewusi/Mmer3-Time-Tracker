@@ -21,6 +21,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "wifi.js",
       "config.json",
       "build/tray.png",
       "build/trayTemplate.png",
@@ -47,6 +48,7 @@
       "identity": null,
       "extendInfo": {
         "NSCameraUsageDescription": "Mmerℇ uses the camera for presence checks while you're clocked in.",
+        "NSLocationUsageDescription": "Mmerℇ reads which Wi-Fi network you're on to tell whether you're in the office. Your location isn't saved.",
         "LSUIElement": true
       }
     },

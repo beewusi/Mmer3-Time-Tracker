@@ -14,6 +14,7 @@ const {
 const path = require('path');
 const fs = require('fs');
 const { execFile } = require('child_process');
+const { normaliseRouter, parseWindows, parseMac } = require('./wifi');
 
 // config.json sits next to the app's files after install (resources folder),
 // so the site address can be changed without rebuilding
@@ -200,27 +201,33 @@ function run(cmd, args) {
   });
 }
 
+// The Wi-Fi network: its name, and the router's own ID (BSSID), which
+// doesn't change when the internet address does. That's what tells the
+// office apart. null where the system won't say (not on Wi-Fi; on a Mac,
+// Location access for Mmerℇ is needed for both).
+async function readWifi() {
+  if (process.platform === 'win32') {
+    return parseWindows(await run('netsh', ['wlan', 'show', 'interfaces']));
+  }
+  if (process.platform === 'darwin') {
+    const summary = await run('ipconfig', ['getsummary', 'en0']);
+    const needName = !/\bSSID : (?!<redacted>)./.test(summary);
+    return parseMac(summary, needName ? await run('networksetup', ['-getairportnetwork', 'en0']) : '');
+  }
+  return {
+    name: (await run('iwgetid', ['-r'])).trim().slice(0, 64) || null,
+    router: normaliseRouter((await run('iwgetid', ['-a', '-r'])).trim())
+  };
+}
+
 ipcMain.handle('wifi', async (e) => {
   if (!fromUs(e)) return null;
-  let name = null;
-  if (process.platform === 'win32') {
-    const out = await run('netsh', ['wlan', 'show', 'interfaces']);
-    const m = out.match(/^\s*SSID\s*:\s*(.+)$/m);
-    name = m ? m[1].trim() : null;
-  } else if (process.platform === 'darwin') {
-    const out = await run('ipconfig', ['getsummary', 'en0']);
-    const m = out.match(/\bSSID : (.+)/);
-    name = m ? m[1].trim() : null;
-    if (!name || name === '<redacted>') {
-      const alt = await run('networksetup', ['-getairportnetwork', 'en0']);
-      const m2 = alt.match(/Current Wi-Fi Network: (.+)/);
-      name = m2 ? m2[1].trim() : null;
-    }
-  } else {
-    name = (await run('iwgetid', ['-r'])).trim() || null;
-  }
-  if (name === '<redacted>') name = null;
-  return name ? name.slice(0, 64) : null;
+  return (await readWifi()).name;
+});
+
+ipcMain.handle('wifi-info', async (e) => {
+  if (!fromUs(e)) return null;
+  return readWifi();
 });
 
 // Mac only: screenshots need Screen Recording allowed in System Settings,
@@ -273,13 +280,15 @@ app.whenReady().then(async () => {
     return;
   }
 
-  // camera for presence checks; nothing else, and only for our site
+  // camera for presence checks, notifications, and location (Mac: only so the
+  // system lets the app read the Wi-Fi details); only for our site
+  const allowed = ['media', 'notifications', 'geolocation'];
   session.defaultSession.setPermissionRequestHandler((wc, permission, callback, details) => {
     const ours = isOurs(details.requestingUrl || wc.getURL());
-    callback(ours && (permission === 'media' || permission === 'notifications'));
+    callback(ours && allowed.includes(permission));
   });
   session.defaultSession.setPermissionCheckHandler((_wc, permission, origin) =>
-    origin === APP_ORIGIN && (permission === 'media' || permission === 'notifications'));
+    origin === APP_ORIGIN && allowed.includes(permission));
 
   if (process.platform === 'darwin') {
     // asks once; the Mac remembers the answer

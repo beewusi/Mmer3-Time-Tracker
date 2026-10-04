@@ -18,18 +18,36 @@ function AdminSecuritySettings() {
   const [networks, setNetworks] = useState([]);
   const [label, setLabel] = useState('');
   const [ip, setIp] = useState('');
-  const [wifi, setWifi] = useState('');
+  const [routers, setRouters] = useState([]);
+  const [seen, setSeen] = useState([]);           // routers the desktop app has seen lately
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
 
   const load = useCallback(async () => {
-    const [s, n] = await Promise.all([
+    const since = new Date(Date.now() - 7 * 86400000).toISOString();
+    const [s, n, r, h, p] = await Promise.all([
       loadSecuritySettings(),
-      supabase.from('office_networks').select('*').order('created_at')
+      supabase.from('office_networks').select('*').order('created_at'),
+      supabase.from('office_routers').select('*').order('created_at'),
+      supabase.from('heartbeats').select('user_id, wifi_name, wifi_router, desktop_seen_at').not('wifi_router', 'is', null).gte('desktop_seen_at', since),
+      supabase.from('profiles').select('id, full_name, email')
     ]);
     setSettings(s);
     setNetworks(n.data || []);
+    setRouters(r.data || []);
+    // one line per router: its Wi-Fi name, who's on it, when last seen
+    const names = new Map((p.data || []).map(x => [x.id, x.full_name || x.email]));
+    const byRouter = new Map();
+    (h.data || []).forEach(b => {
+      const key = b.wifi_router;
+      const entry = byRouter.get(key) || { router: key, wifi: b.wifi_name, people: [], last: b.desktop_seen_at };
+      entry.people.push(names.get(b.user_id) || 'Someone');
+      if (b.desktop_seen_at > entry.last) entry.last = b.desktop_seen_at;
+      if (!entry.wifi && b.wifi_name) entry.wifi = b.wifi_name;
+      byRouter.set(key, entry);
+    });
+    setSeen([...byRouter.values()].sort((a, b) => (a.last < b.last ? 1 : -1)));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -70,18 +88,26 @@ function AdminSecuritySettings() {
     setBusy('');
   }
 
-  function addWifi() {
-    const name = wifi.trim();
-    if (!name) return;
-    const list = settings.office_wifi_names || [];
-    if (list.includes(name)) { setWifi(''); return; }
-    save({ office_wifi_names: [...list, name] });
-    setWifi('');
+  async function addRouter(entry) {
+    setError('');
+    setNote('');
+    setBusy(entry.router);
+    const { error: err } = await supabase.from('office_routers')
+      .insert({ label: entry.wifi || 'Office Wi-Fi', router: entry.router });
+    setBusy('');
+    if (err) setError(err.message);
+    else setNote(`${entry.wifi || 'That router'} now counts as the office.`);
+    load();
   }
 
-  function removeWifi(name) {
-    save({ office_wifi_names: (settings.office_wifi_names || []).filter(n => n !== name) });
+  async function removeRouter(id) {
+    setBusy(id);
+    await supabase.from('office_routers').delete().eq('id', id);
+    setBusy('');
+    load();
   }
+
+  const sameRouter = (a, b) => a.slice(0, 14) === b.slice(0, 14);
 
   async function removeNetwork(id) {
     setBusy(id);
@@ -153,7 +179,7 @@ function AdminSecuritySettings() {
 
       <h2 className="reminders-subheading">Office networks</h2>
       <p className="admin-date sec-admin-note">
-        The office’s internet address. Laptops registered on it are approved straight away; registered anywhere else, they wait for you. Add it from a computer in the office using “Add the network I’m on now”.
+        How Mmerℇ knows someone is in the office: the office’s Wi-Fi router (best, needs the desktop app) or its internet address (may change on home and some business lines). Laptops registered in the office are approved straight away; anywhere else, they wait for you.
       </p>
       <div className="reminders-list sec-network-mode">
         <div className="reminder-item">
@@ -207,29 +233,40 @@ function AdminSecuritySettings() {
         <div className="reminder-item sec-action-item">
           <div className="reminder-icon"><WifiIcon width={18} height={18} /></div>
           <div className="reminder-info">
-            <h3>Office Wi-Fi names</h3>
-            <p>Checked by the desktop app as a second signal. Type the name exactly as it shows on a laptop. Leave empty to skip this check.</p>
-            {(settings.office_wifi_names || []).length > 0 && (
-              <div className="review-chips sec-wifi-chips">
-                {settings.office_wifi_names.map(n => (
-                  <span className="review-chip" key={n}>
-                    {n}
-                    <button className="sec-chip-x" onClick={() => removeWifi(n)} aria-label={`Remove ${n}`}>×</button>
-                  </span>
+            <h3>Office Wi-Fi routers</h3>
+            <p>
+              Each router has its own ID that doesn’t change when the internet address does. A laptop running the Mmerℇ desktop app on one of these counts as in the office. Routers the desktop app has seen in the last week are listed below: add the office ones.
+            </p>
+            {routers.length > 0 && (
+              <div className="sec-router-list">
+                {routers.map(r => (
+                  <div className="sec-router-row" key={r.id}>
+                    <span><strong>{r.label}</strong> · {r.router}</span>
+                    <button className="sec-btn-link" onClick={() => removeRouter(r.id)} disabled={busy === r.id}>
+                      {busy === r.id ? 'Removing…' : 'Remove'}
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
-            <div className="sec-inline-form">
-              <input
-                type="text"
-                placeholder="Wi-Fi name, e.g. Mmer3-Office"
-                value={wifi}
-                maxLength={64}
-                onChange={e => setWifi(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') addWifi(); }}
-              />
-              <button className="sec-btn-secondary" onClick={addWifi} disabled={!wifi.trim()}>Add</button>
-            </div>
+            {seen.filter(x => !routers.some(r => sameRouter(r.router, x.router))).length > 0 ? (
+              <div className="sec-router-list sec-router-seen">
+                <p className="sec-router-caption">Seen by the desktop app</p>
+                {seen.filter(x => !routers.some(r => sameRouter(r.router, x.router))).map(x => (
+                  <div className="sec-router-row" key={x.router}>
+                    <span>
+                      <strong>{x.wifi || 'Wi-Fi'}</strong> · {x.router}
+                      <em> · {x.people.slice(0, 3).join(', ')}{x.people.length > 3 ? ` +${x.people.length - 3}` : ''} · {formatDayTime(x.last)}</em>
+                    </span>
+                    <button className="sec-btn-secondary" onClick={() => addRouter(x)} disabled={!!busy}>
+                      {busy === x.router ? 'Adding…' : 'This is the office'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="sec-router-caption">No other routers seen yet. Open the desktop app on a laptop in the office and it shows up here within a minute.</p>
+            )}
           </div>
         </div>
         <div className={`reminder-item ${outageToday ? 'sec-item-warn' : ''}`}>

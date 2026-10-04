@@ -1,9 +1,11 @@
 # Mmerℇ desktop app
 
-Small tray app for work laptops. It shows the web app's `/companion` page and,
-while the employee is clocked in:
+Small tray app for work laptops. It shows the web app's `/companion` page.
+Whenever it's running it sends a heartbeat every minute with the Wi-Fi name and
+the router's ID (how the office is recognised; see admin Settings → Office
+Wi-Fi routers). While the employee is clocked in it also:
 
-- sends a heartbeat every minute (gaps show on the admin Activity page)
+- shows gaps in contact on the admin Activity page
 - notices when the computer is idle or locked
 - pops up for presence checks (face + blink)
 - takes 1–3 screenshots an hour at random times (set in admin Settings)
@@ -34,3 +36,6 @@ Not code-signed (our own laptops):
 - Windows: SmartScreen says "Windows protected your PC" → More info → Run anyway.
 - Mac: right-click the app → Open → Open (first time only). Then allow
   Camera and Screen Recording in System Settings → Privacy & Security when asked.
+  For the office Wi-Fi check, Mmer3 also needs Location Services on (System
+  Settings → Privacy & Security → Location Services), otherwise the Mac hides
+  the Wi-Fi details.

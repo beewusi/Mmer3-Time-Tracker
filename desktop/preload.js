@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('mmer3Desktop', {
   capture: () => ipcRenderer.invoke('capture'),
   getIdle: () => ipcRenderer.invoke('idle'),
   getWifiName: () => ipcRenderer.invoke('wifi'),
+  getWifi: () => ipcRenderer.invoke('wifi-info'),
   showWindow: () => ipcRenderer.invoke('show-window'),
   permissions: () => ipcRenderer.invoke('permissions'),
   openPrivacySettings: () => ipcRenderer.invoke('open-privacy-settings'),
