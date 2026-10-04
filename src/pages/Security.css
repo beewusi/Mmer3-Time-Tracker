@@ -725,3 +725,17 @@
 .admin-layout.dark .review-draft-btn:not(:disabled) {
   color: #60A5FA;
 }
+
+/* admin Devices: why a laptop is waiting / how it was approved */
+.sec-cell-note {
+  display: block;
+  margin-top: 4px;
+  max-width: 260px;
+  font-size: 11.5px;
+  color: var(--gray-500);
+  line-height: 1.4;
+}
+
+.admin-layout.dark .sec-cell-note { color: var(--gray-400); }
+
+.sec-network-mode { margin-bottom: var(--space-4); }

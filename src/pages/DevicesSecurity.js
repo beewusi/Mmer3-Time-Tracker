@@ -21,14 +21,14 @@ function guessLaptopName() {
 }
 
 const FACE_STATUS = {
-  pending: { label: 'Waiting for approval', tone: 'pending' },
+  pending: { label: 'Saving…', tone: 'pending' },
   approved: { label: 'Active', tone: 'active' },
-  rejected: { label: 'Not accepted', tone: 'danger' },
+  rejected: { label: 'Retake needed', tone: 'danger' },
   withdrawn: { label: 'Consent withdrawn', tone: 'neutral' }
 };
 
 const DEVICE_STATUS = {
-  pending: { label: 'Waiting for approval', tone: 'pending' },
+  pending: { label: 'Waiting for your admin', tone: 'pending' },
   approved: { label: 'Approved', tone: 'active' }
 };
 
@@ -79,8 +79,10 @@ function DevicesSecurity({ user, onChanged }) {
     setDeviceNote('');
     setRegistering(true);
     try {
-      await registerThisLaptop(laptopName);
-      setDeviceNote('Laptop registered. Your admin needs to approve it before it counts at clock-in.');
+      const device = await registerThisLaptop(laptopName);
+      setDeviceNote(device?.status === 'approved'
+        ? 'Laptop registered and approved. You can clock in from it now.'
+        : 'Laptop registered. You weren’t on the office network, so your admin needs to approve it. You can clock in meanwhile; your hours count once it’s approved.');
       setDevices(await listMyDevices(user.id));
       onChanged && onChanged();
     } catch (err) {
@@ -107,7 +109,7 @@ function DevicesSecurity({ user, onChanged }) {
     setFaceError('');
     try {
       await saveFaceProfile(user.id, result.descriptor, result.photoBlob);
-      setFaceNote('Face saved. Your admin will approve it, then it’s used when you clock in.');
+      setFaceNote('Face check set up. It’s used every time you clock in.');
       setFace(await getMyFaceProfile());
       setConsent(false);
       onChanged && onChanged();
@@ -151,7 +153,7 @@ function DevicesSecurity({ user, onChanged }) {
       {/* ---------- laptop ---------- */}
       <h2 className="reminders-subheading sec-first-heading">Work laptop</h2>
       <p className="page-date reminders-subnote">
-        Register the laptop you were given. At clock-in it asks for Windows Hello or Touch ID, so only this laptop can clock you in.
+        Register the laptop you were given. At clock-in it asks for Windows Hello or Touch ID, so only this laptop can clock you in. Registered on the office network, it’s approved straight away.
       </p>
       <div className="reminders-list">
         {devices.map(d => {
@@ -170,6 +172,9 @@ function DevicesSecurity({ user, onChanged }) {
                   {d.last_used_at ? ` · last used ${formatAgo(d.last_used_at)}` : ''}
                   {d.synced ? ' · passkey also saved to a phone or other device' : ''}
                 </p>
+                {d.status === 'pending' && (
+                  <p>Registered outside the office network, so your admin approves it. You can clock in meanwhile; your hours count once it’s approved.</p>
+                )}
               </div>
               <span className={`reminder-badge sec-badge-${info.tone}`}>{info.label}</span>
               {d.status === 'pending' && (
@@ -240,7 +245,7 @@ function DevicesSecurity({ user, onChanged }) {
                 {face.status === 'withdrawn'
                   ? `Consent withdrawn ${formatDayTime(face.updated_at)}. Your face data and photo were deleted.`
                   : `Set up ${formatDayTime(face.updated_at || face.consent_at)} · consent given ${formatDayTime(face.consent_at)}`}
-                {face.status === 'rejected' ? ' · your admin didn’t accept this photo, please retake it' : ''}
+                {face.status === 'rejected' ? ' · your admin has asked for a new photo, please retake it' : ''}
                 {faceLocked ? ' · to change your photo, ask your admin' : ''}
               </p>
               {faceLocked && (
@@ -308,7 +313,7 @@ function DevicesSecurity({ user, onChanged }) {
         <div className="popup-overlay">
           <div className="popup-box">
             <h3>Withdraw consent?</h3>
-            <p>Your face template and setup photo will be deleted. Your clock-ins will be flagged for your admin until another way of confirming them is agreed.</p>
+            <p>Your face template and setup photo will be deleted. Clocking in needs the face check, so you won’t be able to clock in until you set it up again. Speak to your admin if you need another way.</p>
             <div className="popup-buttons">
               <button className="popup-cancel" onClick={() => setConfirmWithdraw(false)}>Cancel</button>
               <button className="popup-confirm sec-danger" onClick={handleWithdraw}>Withdraw</button>
@@ -325,9 +330,9 @@ function DevicesSecurity({ user, onChanged }) {
         />
       )}
 
-      {settings && settings.require_registered_device && !devices.some(d => d.status === 'approved') && (
+      {settings && settings.require_registered_device && !devices.some(d => d.status === 'approved' || d.status === 'pending') && (
         <p className="sec-footnote">
-          <AlertIcon width={13} height={13} /> Until a laptop is approved, your clock-ins are marked for your admin to check.
+          <AlertIcon width={13} height={13} /> You can clock in once this laptop is registered and your face check is set up.
         </p>
       )}
     </div>

@@ -4,18 +4,21 @@
 // flagged runs here, not in the browser:
 //   register-options / register-verify   register a work laptop (passkey)
 //   auth-options                         passkey challenge before clocking in
-//   clock-in                             laptop, face, network and same-laptop
-//                                        checks, saved as evidence + flags,
-//                                        then the presence checks are scheduled
+//   clock-in                             face + laptop (+ network if office only)
+//                                        checked, then the session is started here,
+//                                        evidence saved, presence checks scheduled.
+//                                        Also takes a clock-in made while offline.
+//   resume                               back from a pause after a missed presence
+//                                        check (face again)
+//   clock-out                            hours worked out here, session saved
 //   face-try                             does this face match? (between tries, nothing saved)
 //   presence                             answer a presence check (face matched here)
-//   offline-clock-in                     a clock-in saved while the laptop was offline,
-//                                        sent once it's back (flagged for the admin)
 //   my-ip                                the internet address the request came from
 //                                        (admin "add the network I'm on now")
 //
-// Nothing here blocks a clock-in. Anything that doesn't add up becomes a flag
-// for the admin's Review page.
+// Missing setup, no face, or not their laptop blocks the clock-in. A face that
+// doesn't match after 3 tries clocks in and goes to Review; everything else
+// is just recorded on the session.
 //
 // Deploy: supabase functions deploy clock-check
 // Optional secret: APP_ORIGINS = comma-separated site addresses allowed to use
@@ -34,6 +37,7 @@ import { isoBase64URL } from 'npm:@simplewebauthn/server@14/helpers';
 
 const RP_NAME = 'Mmerℇ';
 const FACE_MATCH = 0.5;              // face-api distance, lower = closer
+const FACE_TRIES = 3;                // then a mismatch clocks in and goes to Review
 const CHALLENGE_MINUTES = 5;
 const SAME_DEVICE_HOURS = 12;
 const WORKDAY_MINUTES = 8 * 60;      // auto clock-out is at 8 h 15 min
@@ -67,10 +71,17 @@ function allowedOrigin(origin: string | null): string | null {
 // it); x-forwarded-for's first entry can be typed in by the caller, so it's
 // only the last resort.
 function callerIp(req: Request): string | null {
-  const direct = req.headers.get('cf-connecting-ip') ?? req.headers.get('x-real-ip');
-  if (direct) return direct.trim();
+  const direct = trustedIp(req);
+  if (direct) return direct;
   const fwd = req.headers.get('x-forwarded-for');
   return fwd ? fwd.split(',')[0].trim() : null;
+}
+
+// only the address the platform itself sets: used for anything that decides
+// (laptop approved, office only). Unknown = treated as not the office.
+function trustedIp(req: Request): string | null {
+  const direct = req.headers.get('cf-connecting-ip') ?? req.headers.get('x-real-ip');
+  return direct ? direct.trim() : null;
 }
 
 // Photo has to be this person's, of the right kind, and taken just now
@@ -91,6 +102,27 @@ function distance(a: number[], b: number[]): number {
 
 function validDescriptor(d: unknown): d is number[] {
   return Array.isArray(d) && d.length === 128 && d.every(n => typeof n === 'number' && Number.isFinite(n));
+}
+
+// refused, with a code the app can act on (e.g. open Devices & Security)
+function blocked(code: string, message: string) {
+  return json({ error: message, code, blocked: true }, 403);
+}
+
+// records keep the date as DD/MM/YYYY and times as HH:MM, Ghana time (GMT)
+function ghanaDate(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
+}
+
+function ghanaClock(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+}
+
+function hms(total: number): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(Math.floor(total / 3600))}:${p(Math.floor((total % 3600) / 60))}:${p(total % 60)}`;
 }
 
 // today in Ghana (GMT, no daylight saving)
@@ -174,6 +206,23 @@ Deno.serve(async (req: Request) => {
 
       const { credential, credentialBackedUp } = result.registrationInfo;
       const label = String(body.label ?? '').trim().slice(0, 60) || 'Work laptop';
+      const deviceKey = typeof body.deviceKey === 'string' ? body.deviceKey.slice(0, 64) : null;
+
+      // already someone else's laptop (same browser)
+      if (deviceKey) {
+        const { data: theirs } = await db
+          .from('devices').select('id').eq('device_key', deviceKey).neq('user_id', user.id).neq('status', 'revoked').limit(1);
+        if (theirs?.length) {
+          return blocked('LAPTOP_TAKEN', 'This laptop is already registered to someone else. Register your own work laptop.');
+        }
+      }
+
+      // on an office network: approved straight away. Anywhere else: waits
+      // for the admin (their hours are held until then).
+      const ip = trustedIp(req);
+      const { data: networks } = await db.from('office_networks').select('ip');
+      const onOffice = !!ip && (networks ?? []).some(n => n.ip === ip);
+
       const { data: device, error } = await db.from('devices').insert({
         user_id: user.id,
         label,
@@ -181,9 +230,12 @@ Deno.serve(async (req: Request) => {
         public_key: isoBase64URL.fromBuffer(credential.publicKey),
         counter: credential.counter,
         transports: credential.transports ?? null,
-        device_key: typeof body.deviceKey === 'string' ? body.deviceKey.slice(0, 64) : null,
+        device_key: deviceKey,
         synced: credentialBackedUp,
-        status: 'pending'
+        registered_ip: ip ?? callerIp(req),
+        status: onOffice ? 'approved' : 'pending',
+        approved_at: onOffice ? new Date().toISOString() : null,
+        approved_how: onOffice ? 'office_network' : null
       }).select('id, label, status, created_at, synced').single();
       if (error) throw error;
       return json({ device });
@@ -191,9 +243,10 @@ Deno.serve(async (req: Request) => {
 
     // ---------- passkey challenge before clocking in ----------
     if (action === 'auth-options') {
+      // approved, or still waiting for the admin (they can work meanwhile)
       const { data: devices } = await db
         .from('devices').select('credential_id, transports')
-        .eq('user_id', user.id).eq('status', 'approved');
+        .eq('user_id', user.id).in('status', ['approved', 'pending']);
       if (!devices?.length) return json({ options: null });
 
       const options = await generateAuthenticationOptions({
@@ -206,80 +259,124 @@ Deno.serve(async (req: Request) => {
       return json({ options });
     }
 
-    // ---------- clock-in checks ----------
+    // ---------- clock in ----------
+    // Checked here first, then the session is started here (the browser can't
+    // start one itself). Blocked: no face set up, no face seen, not their
+    // laptop, no laptop registered, off the office network when Settings says
+    // office only. Face not matching after 3 tries: clocked in, goes to Review.
+    // clockInAt = a clock-in made while offline, sent now it's back.
     if (action === 'clock-in') {
-      const { data: status } = await db
-        .from('employee_status').select('status, session_id, clock_in_at, location_status')
-        .eq('user_id', user.id).maybeSingle();
-      if (!status?.session_id || !['clocked_in', 'on_break'].includes(status.status)) {
-        return json({ error: 'No session running' }, 400);
+      const { data: current } = await db
+        .from('employee_status').select('status').eq('user_id', user.id).maybeSingle();
+      if (current && ['clocked_in', 'on_break'].includes(current.status)) {
+        return json({ ok: true, alreadyLive: true });
       }
-      if (Date.now() - new Date(status.clock_in_at).getTime() > 15 * 60 * 1000) {
-        return json({ error: 'Checks have to be sent straight after clocking in' }, 400);
-      }
-      const sessionId = status.session_id;
-
-      // sent twice (double tap, retry)? keep the first
-      const { data: already } = await db
-        .from('clock_evidence').select('id').eq('session_id', sessionId).eq('kind', 'clock_in').maybeSingle();
-      if (already) return json({ ok: true, repeated: true });
 
       const { data: settings } = await db.from('security_settings').select('*').eq('id', 1).maybeSingle();
       const flags: { type: string; severity: string; details: Record<string, unknown> }[] = [];
       const flag = (type: string, severity: string, details: Record<string, unknown> = {}) =>
         flags.push({ type, severity, details });
 
-      // laptop
+      // offline clock-in: the time it was made, up to 6 hours back
+      let clockInAt = new Date();
+      if (body.clockInAt) {
+        const claimed = new Date(String(body.clockInAt));
+        if (Number.isNaN(claimed.getTime()) || claimed.getTime() > Date.now() + 60000 || claimed.getTime() < Date.now() - 6 * 3600000) {
+          return blocked('OFFLINE_TOO_OLD', 'That offline clock-in is too old to send. Clock in again, or ask your admin to add the time.');
+        }
+        clockInAt = claimed;
+        flag('offline_clock_in', 'medium', {
+          claimed_at: claimed.toISOString(),
+          sent_at: new Date().toISOString(),
+          minutes_late: Math.round((Date.now() - claimed.getTime()) / 60000)
+        });
+      }
+
+      // face: required
+      const face = body.face ?? {};
+      let faceResult = 'skipped';
+      let faceDistance: number | null = null;
+      if (settings?.face_check_enabled !== false) {
+        const { data: profile } = await db
+          .from('face_profiles').select('descriptor, status').eq('user_id', user.id).maybeSingle();
+        if (!profile || profile.status !== 'approved') {
+          return blocked('FACE_SETUP', 'Set up your face check in Devices & Security before you clock in.');
+        }
+        if (face.noFace || !validDescriptor(face.descriptor)) {
+          return blocked('NO_FACE', 'No face was seen, so you can’t clock in. Turn the camera on, face it in good light and try again.');
+        }
+        faceDistance = distance(face.descriptor, profile.descriptor);
+        const matched = faceDistance < FACE_MATCH;
+        const tries = Number.isInteger(face.attempts) ? face.attempts : 1;
+        if ((!matched || face.blink !== true) && tries < FACE_TRIES) {
+          return blocked('FACE_RETRY', 'That didn’t pass. Please try the face check again.');
+        }
+        faceResult = matched ? 'match' : 'no_match';
+        if (!matched) {
+          flag('face_failed', 'high', { reason: 'Face did not match', distance: round(faceDistance), attempts: tries });
+        } else if (face.blink !== true) {
+          flag('face_failed', 'medium', { reason: 'Face matched but the eyes weren’t seen closing (could be a photo)', distance: round(faceDistance), attempts: tries });
+        }
+      }
+
+      // laptop: registered (approved, or waiting for the admin) and this is it
       let deviceVerified = false;
       let deviceId: string | null = null;
-      const { data: approved } = await db
-        .from('devices').select('*').eq('user_id', user.id).eq('status', 'approved');
-
-      if (!approved?.length) {
-        if (settings?.require_registered_device !== false) {
-          flag('device_unregistered', 'medium', { note: 'No approved work laptop yet' });
+      let laptopPending = false;
+      const deviceKey = typeof body.deviceKey === 'string' ? body.deviceKey.slice(0, 64) : null;
+      if (settings?.require_registered_device !== false) {
+        const { data: mine } = await db
+          .from('devices').select('*').eq('user_id', user.id).in('status', ['approved', 'pending']);
+        if (!mine?.length) {
+          return blocked('LAPTOP_SETUP', 'Register this laptop in Devices & Security before you clock in.');
         }
-      } else if (!body.assertion) {
-        flag('device_not_verified', 'high', { reason: body.passkeyError || 'Passkey check not done' });
-      } else {
-        const device = approved.find(d => d.credential_id === body.assertion.id);
+        if (!body.assertion) {
+          return blocked('LAPTOP_CHECK', body.passkeyError || 'The laptop check wasn’t done. Please try again.');
+        }
+        const device = mine.find(d => d.credential_id === body.assertion.id);
         const challenge = await takeChallenge(db, user.id, 'verify');
-        if (!device || !challenge) {
-          flag('device_not_verified', 'high', { reason: !device ? 'Not one of their approved laptops' : 'Passkey check expired' });
-        } else {
-          try {
-            const result = await verifyAuthenticationResponse({
-              response: body.assertion,
-              expectedChallenge: challenge,
-              expectedOrigin: origin!,
-              expectedRPID: rpID,
-              credential: {
-                id: device.credential_id,
-                publicKey: isoBase64URL.toBuffer(device.public_key),
-                counter: Number(device.counter),
-                transports: device.transports ?? undefined
-              },
-              requireUserVerification: true
-            });
-            deviceVerified = result.verified;
-            deviceId = device.id;
-            if (result.verified) {
-              await db.from('devices').update({
-                counter: result.authenticationInfo.newCounter,
-                last_used_at: new Date().toISOString()
-              }).eq('id', device.id);
-            } else {
-              flag('device_not_verified', 'high', { reason: 'Passkey did not verify', device: device.label });
-            }
-          } catch (e) {
-            flag('device_not_verified', 'high', { reason: (e as Error).message, device: device.label });
-          }
+        if (!device) return blocked('NOT_YOUR_LAPTOP', 'This isn’t your registered laptop. Clock in from your own work laptop.');
+        if (!challenge) return blocked('LAPTOP_CHECK', 'The laptop check took too long. Please try again.');
+        try {
+          const result = await verifyAuthenticationResponse({
+            response: body.assertion,
+            expectedChallenge: challenge,
+            expectedOrigin: origin!,
+            expectedRPID: rpID,
+            credential: {
+              id: device.credential_id,
+              publicKey: isoBase64URL.toBuffer(device.public_key),
+              counter: Number(device.counter),
+              transports: device.transports ?? undefined
+            },
+            requireUserVerification: true
+          });
+          if (!result.verified) return blocked('NOT_YOUR_LAPTOP', 'The laptop check didn’t pass. Clock in from your own work laptop.');
+          await db.from('devices').update({
+            counter: result.authenticationInfo.newCounter,
+            last_used_at: new Date().toISOString()
+          }).eq('id', device.id);
+        } catch {
+          return blocked('NOT_YOUR_LAPTOP', 'The laptop check didn’t pass. Clock in from your own work laptop.');
+        }
+        deviceVerified = true;
+        deviceId = device.id;
+        laptopPending = device.status === 'pending';
+        if (laptopPending) flag('device_pending', 'low', { device: device.label });
+      }
+
+      // this browser registered as someone else's laptop
+      if (deviceKey) {
+        const { data: theirs } = await db
+          .from('devices').select('id').eq('device_key', deviceKey).neq('user_id', user.id).neq('status', 'revoked').limit(1);
+        if (theirs?.length) {
+          return blocked('NOT_YOUR_LAPTOP', 'This laptop is registered to someone else. Clock in from your own work laptop.');
         }
       }
 
       // office network: internet address, and the Wi-Fi name if the desktop
-      // app is running (second signal). Either one off = flagged.
-      const ip = callerIp(req);
+      // app is running. Blocks only when Settings says office only.
+      const ip = trustedIp(req);
       let networkId: string | null = null;
       let onOfficeNetwork: boolean | null = null;
       const { data: networks } = await db.from('office_networks').select('id, label, ip');
@@ -298,157 +395,198 @@ Deno.serve(async (req: Request) => {
         if (wifiName && officeWifi.length) onOfficeWifi = officeWifi.includes(wifiName);
       }
       const outageToday = settings?.network_outage_on === todayGhana();
-      if (!outageToday && (onOfficeNetwork === false || onOfficeWifi === false)) {
+      const offNetwork = onOfficeNetwork === false || onOfficeWifi === false;
+      if (settings?.network_mode === 'office_only' && !outageToday && onOfficeNetwork !== true) {
+        if (!networks?.length) {
+          return blocked('OFF_NETWORK', 'Clocking in is set to the office network only, but no office network has been added yet. Ask your admin.');
+        }
+        if (onOfficeNetwork === null || offNetwork) {
+          return blocked('OFF_NETWORK', 'You’re not on the office network, so you can’t clock in from here. Connect to the office network and try again.');
+        }
+      }
+      if (!outageToday && offNetwork) {
         flag('off_network', 'low', {
           ip: onOfficeNetwork === false ? ip : undefined,
           wifi: onOfficeWifi === false ? wifiName : undefined
         });
       }
 
-      // face
-      let faceResult: string = 'skipped';
-      let faceDistance: number | null = null;
-      const face = body.face ?? {};
-      if (settings?.face_check_enabled !== false) {
-        const { data: profile } = await db
-          .from('face_profiles').select('descriptor, status').eq('user_id', user.id).maybeSingle();
-        if (!profile || profile.status !== 'approved') {
-          faceResult = 'not_registered';
-          // had a face and withdrew it: worth a closer look than never set up
-          flag('face_not_registered', profile?.status === 'withdrawn' ? 'medium' : 'low', { status: profile?.status ?? 'none' });
-        } else if (face.noFace || !validDescriptor(face.descriptor)) {
-          faceResult = 'no_face';
-          flag('face_failed', 'high', { reason: 'No face seen', attempts: face.attempts ?? null });
-        } else {
-          faceDistance = distance(face.descriptor, profile.descriptor);
-          faceResult = faceDistance < FACE_MATCH ? 'match' : 'no_match';
-          if (faceResult === 'no_match') {
-            flag('face_failed', 'high', { reason: 'Face did not match', distance: round(faceDistance), attempts: face.attempts ?? null });
-          } else if (face.blink !== true) {
-            flag('face_failed', 'medium', { reason: 'Face matched but no blink was seen (could be a photo)', distance: round(faceDistance) });
-          }
-        }
-      }
-
-      // same laptop used by someone else today
-      const deviceKey = typeof body.deviceKey === 'string' ? body.deviceKey.slice(0, 64) : null;
+      // same browser used by another account recently (recorded)
       if (deviceKey) {
         const since = new Date(Date.now() - SAME_DEVICE_HOURS * 3600 * 1000).toISOString();
         const { data: others } = await db
           .from('clock_evidence').select('user_id, session_id, created_at')
           .eq('device_key', deviceKey).neq('user_id', user.id).gte('created_at', since);
-        // one flag per colleague, their latest session
-        const latest = new Map<string, { user_id: string; session_id: string; created_at: string }>();
+        const seen = new Set<string>();
         for (const o of others ?? []) {
-          const seen = latest.get(o.user_id);
-          if (!seen || o.created_at > seen.created_at) latest.set(o.user_id, o);
-        }
-        for (const other of latest.values()) {
-          flag('same_device', 'high', { other_user_id: other.user_id, other_session_id: other.session_id, other_at: other.created_at });
-          await db.from('session_flags').insert({
-            user_id: other.user_id,
-            session_id: other.session_id,
-            type: 'same_device',
-            severity: 'high',
-            details: { other_user_id: user.id, other_session_id: sessionId, other_at: new Date().toISOString() }
-          });
+          if (seen.has(o.user_id)) continue;
+          seen.add(o.user_id);
+          flag('same_device', 'high', { other_user_id: o.user_id, other_session_id: o.session_id, other_at: o.created_at });
         }
       }
 
-      const photoPath = freshPhoto(body.photoPath, user.id, 'clockin', new Date(status.clock_in_at).getTime() - 10 * 60000);
+      // all good: start the session
+      const locationStatus = ['authorised', 'unauthorised', 'unavailable'].includes(body.locationStatus)
+        ? body.locationStatus
+        : 'unavailable';
+      const { error: startError } = await db.from('employee_status').upsert({
+        user_id: user.id,
+        status: 'clocked_in',
+        clock_in_at: clockInAt.toISOString(),
+        break_started_at: null,
+        break_accum_seconds: 0,
+        location_status: body.clockInAt ? 'unavailable' : locationStatus,
+        paused_for_check: false,
+        held_for_laptop: laptopPending,
+        held_device_id: laptopPending ? deviceId : null,
+        break_2h_sent: false,
+        break_3h_sent: false,
+        clock_out_8h_sent: false,
+        auto_clock_out_sent: false,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id' });
+      if (startError) throw startError;
+      const { data: started } = await db
+        .from('employee_status').select('*').eq('user_id', user.id).maybeSingle();
+      const sessionId = started?.session_id;
+      if (!sessionId) return json({ error: 'The session couldn’t be started. Please try again.' }, 500);
 
-      const { error: evidenceError } = await db.from('clock_evidence').insert({
+      const photoPath = freshPhoto(body.photoPath, user.id, 'clockin', Date.now() - 10 * 60000);
+      await db.from('clock_evidence').insert({
         user_id: user.id,
         session_id: sessionId,
         kind: 'clock_in',
         device_id: deviceId,
         device_verified: deviceVerified,
         device_key: deviceKey,
-        ip,
+        ip: ip ?? callerIp(req),
         network_id: networkId,
         on_office_network: onOfficeNetwork,
-        location_status: status.location_status,
+        location_status: started.location_status,
         face_result: faceResult,
         face_distance: faceDistance,
         face_attempts: Number.isInteger(face.attempts) ? face.attempts : null,
         blink_passed: typeof face.blink === 'boolean' ? face.blink : null,
         photo_path: photoPath,
-        user_agent: (req.headers.get('user-agent') ?? '').slice(0, 300),
+        user_agent: (body.clockInAt ? `Offline clock-in, sent ${new Date().toISOString()} · ` : '') + (req.headers.get('user-agent') ?? '').slice(0, 260),
         wifi_name: wifiName
       });
-      if (evidenceError) {
-        // sent twice at the same moment: the first one already saved it
-        if ((evidenceError as { code?: string }).code === '23505') return json({ ok: true, repeated: true });
-        throw evidenceError;
-      }
 
       if (flags.length) {
         await db.from('session_flags').insert(flags.map(f => ({
           user_id: user.id, session_id: sessionId, type: f.type, severity: f.severity, details: f.details
         })));
       }
+      // other account on this browser: their session gets it too
+      for (const f of flags.filter(x => x.type === 'same_device')) {
+        await db.from('session_flags').insert({
+          user_id: f.details.other_user_id,
+          session_id: f.details.other_session_id,
+          type: 'same_device',
+          severity: 'high',
+          details: { other_user_id: user.id, other_session_id: sessionId, other_at: new Date().toISOString() }
+        });
+      }
 
-      await schedulePresenceChecks(db, user.id, sessionId, new Date(status.clock_in_at), settings);
+      // checks from now on (an offline clock-in doesn't get ones in the past)
+      await schedulePresenceChecks(db, user.id, sessionId, body.clockInAt ? new Date() : clockInAt, settings);
 
-      return json({ ok: true, deviceVerified, faceResult, flags: flags.map(f => f.type) });
+      return json({
+        ok: true,
+        status: started,
+        faceResult,
+        laptopPending,
+        flags: flags.map(f => f.type)
+      });
     }
 
-    // ---------- clock-in made while offline, sent now ----------
-    if (action === 'offline-clock-in') {
-      const claimed = new Date(String(body.clockInAt || ''));
-      const now = Date.now();
-      if (Number.isNaN(claimed.getTime()) || claimed.getTime() > now + 60000 || claimed.getTime() < now - 6 * 3600000) {
-        return json({ error: 'That offline clock-in is too old to send. Ask your admin to add it.' }, 400);
+    // ---------- back from a pause (missed presence check) ----------
+    // Face again; not matching after 3 tries still lets them carry on but
+    // goes to Review. The pause counts as a break.
+    if (action === 'resume') {
+      const { data: status } = await db
+        .from('employee_status').select('*').eq('user_id', user.id).maybeSingle();
+      if (!status || status.status !== 'on_break' || !status.paused_for_check) {
+        return json({ ok: true, notPaused: true });
       }
-      const { data: current } = await db
-        .from('employee_status').select('status').eq('user_id', user.id).maybeSingle();
-      if (current && ['clocked_in', 'on_break'].includes(current.status)) {
-        return json({ ok: true, alreadyLive: true });
+      const { data: settings } = await db.from('security_settings').select('face_check_enabled').eq('id', 1).maybeSingle();
+      const face = body.face ?? {};
+      if (settings?.face_check_enabled !== false) {
+        const { data: profile } = await db
+          .from('face_profiles').select('descriptor, status').eq('user_id', user.id).maybeSingle();
+        if (profile?.status !== 'approved') {
+          return blocked('FACE_SETUP', 'Your face check isn’t set up, so you can’t carry on. Set it up in Devices & Security, or ask your admin.');
+        }
+        {
+          if (face.noFace || !validDescriptor(face.descriptor)) {
+            return blocked('NO_FACE', 'No face was seen. Face the camera in good light and try again.');
+          }
+          const d = distance(face.descriptor, profile.descriptor);
+          const tries = Number.isInteger(face.attempts) ? face.attempts : 1;
+          if (d >= FACE_MATCH && tries < FACE_TRIES) {
+            return blocked('FACE_RETRY', 'That didn’t pass. Please try the face check again.');
+          }
+          if (d >= FACE_MATCH) {
+            await db.from('session_flags').insert({
+              user_id: user.id,
+              session_id: status.session_id,
+              type: 'face_failed',
+              severity: 'high',
+              details: { reason: 'Face did not match when coming back from a pause', distance: round(d), attempts: tries }
+            });
+          }
+        }
       }
-
-      await db.from('employee_status').upsert({
-        user_id: user.id,
+      const pausedFor = status.break_started_at
+        ? Math.max(0, Math.round((Date.now() - new Date(status.break_started_at).getTime()) / 1000))
+        : 0;
+      // only if still paused (not clocked out by the sweep meanwhile)
+      const { data: resumed } = await db.from('employee_status').update({
         status: 'clocked_in',
-        clock_in_at: claimed.toISOString(),
+        break_started_at: null,
+        break_accum_seconds: (status.break_accum_seconds || 0) + pausedFor,
+        paused_for_check: false,
+        updated_at: new Date().toISOString()
+      }).eq('user_id', user.id).eq('status', 'on_break').eq('paused_for_check', true).select('user_id');
+      const { data: after } = await db.from('employee_status').select('*').eq('user_id', user.id).maybeSingle();
+      if (!resumed?.length) return json({ ok: true, notPaused: true, status: after });
+      return json({ ok: true, status: after });
+    }
+
+    // ---------- clock out ----------
+    // Hours worked out here from the session (a break or pause still going
+    // isn't counted) and saved as the record; the browser can't write records.
+    if (action === 'clock-out') {
+      const { data: status } = await db
+        .from('employee_status').select('*').eq('user_id', user.id).maybeSingle();
+      if (!status || !['clocked_in', 'on_break'].includes(status.status)) return json({ ok: true, notLive: true });
+      const now = new Date();
+      const clockInAt = status.clock_in_at ? new Date(status.clock_in_at) : now;
+      const workEnd = status.status === 'on_break' && status.break_started_at ? new Date(status.break_started_at) : now;
+      const worked = Math.max(0, Math.round((workEnd.getTime() - clockInAt.getTime()) / 1000) - (status.break_accum_seconds || 0));
+      const { error: recordError } = await db.from('records').insert([{
+        user_id: user.id,
+        date: ghanaDate(now),
+        clock_in: ghanaClock(clockInAt),
+        clock_out: ghanaClock(now),
+        hours_worked: hms(worked),
+        break_time: hms(status.break_accum_seconds || 0),
+        location_status: status.location_status || 'unavailable',
+        adjusted_by_admin: false
+      }]);
+      if (recordError) throw recordError;
+      await db.from('employee_status').update({
+        status: 'clocked_out',
+        clock_in_at: null,
         break_started_at: null,
         break_accum_seconds: 0,
-        location_status: 'unavailable',
-        break_2h_sent: false,
-        break_3h_sent: false,
-        clock_out_8h_sent: false,
-        auto_clock_out_sent: false,
-        updated_at: new Date().toISOString()
-      });
-      const { data: started } = await db
-        .from('employee_status').select('session_id').eq('user_id', user.id).maybeSingle();
-      const sessionId = started?.session_id;
-      if (!sessionId) return json({ error: 'Couldn’t start the session' }, 500);
-
-      await db.from('clock_evidence').insert({
-        user_id: user.id,
-        session_id: sessionId,
-        kind: 'clock_in',
-        device_key: typeof body.deviceKey === 'string' ? body.deviceKey.slice(0, 64) : null,
-        ip: callerIp(req),
-        location_status: 'unavailable',
-        face_result: 'skipped',
-        user_agent: `Offline clock-in, sent ${new Date().toISOString()}`
-      });
-      await db.from('session_flags').insert({
-        user_id: user.id,
-        session_id: sessionId,
-        type: 'offline_clock_in',
-        severity: 'medium',
-        details: {
-          claimed_at: claimed.toISOString(),
-          sent_at: new Date().toISOString(),
-          minutes_late: Math.round((now - claimed.getTime()) / 60000)
-        }
-      });
-      const { data: settings } = await db.from('security_settings').select('*').eq('id', 1).maybeSingle();
-      // checks from now on, not from the (past) clock-in time
-      await schedulePresenceChecks(db, user.id, sessionId, new Date(), settings);
-      return json({ ok: true });
+        location_status: null,
+        paused_for_check: false,
+        held_for_laptop: false,
+        held_device_id: null,
+        updated_at: now.toISOString()
+      }).eq('user_id', user.id);
+      return json({ ok: true, worked });
     }
 
     // ---------- face try (between attempts, nothing saved) ----------
@@ -476,17 +614,28 @@ Deno.serve(async (req: Request) => {
         return json({ error: 'This check is no longer open' }, 400);
       }
 
+      // nobody in front of the camera = same as not answering: time paused
+      if (!validDescriptor(body.descriptor)) {
+        const { data: marked } = await db.from('presence_checks').update({
+          result: 'missed',
+          responded_at: new Date().toISOString(),
+          answered_from: body.from === 'desktop' ? 'desktop' : 'web'
+        }).eq('id', check.id).eq('result', 'pending').select('id');
+        if (!marked?.length) return json({ error: 'This check is no longer open' }, 400);
+        if (live.status === 'clocked_in') await pauseForCheck(db, user.id, check.due_at);
+        return json({ result: 'missed', paused: live.status === 'clocked_in' });
+      }
+
       let result = 'failed';
       let faceDistance: number | null = null;
       const { data: profile } = await db
         .from('face_profiles').select('descriptor, status').eq('user_id', user.id).maybeSingle();
-      if (validDescriptor(body.descriptor)) {
-        if (profile?.status === 'approved') {
-          faceDistance = distance(body.descriptor, profile.descriptor);
-          result = faceDistance < FACE_MATCH ? 'passed' : 'failed';
-        } else {
-          result = 'passed';     // someone was there; no approved face to compare with
-        }
+      const { data: faceSetting } = await db.from('security_settings').select('face_check_enabled').eq('id', 1).maybeSingle();
+      if (faceSetting?.face_check_enabled === false) {
+        result = 'passed';       // face check off: someone answered
+      } else if (profile?.status === 'approved') {
+        faceDistance = distance(body.descriptor, profile.descriptor);
+        result = faceDistance < FACE_MATCH ? 'passed' : 'failed';
       }
 
       const photoPath = freshPhoto(body.photoPath, user.id, 'presence', new Date(check.due_at).getTime());
@@ -506,7 +655,7 @@ Deno.serve(async (req: Request) => {
           session_id: check.session_id,
           type: 'presence_failed',
           severity: 'high',
-          details: { check_id: check.id, due_at: check.due_at, distance: faceDistance === null ? null : round(faceDistance), reason: faceDistance === null ? 'No face seen' : 'Face did not match' }
+          details: { check_id: check.id, due_at: check.due_at, distance: faceDistance === null ? null : round(faceDistance), reason: faceDistance === null ? 'No face check set up to compare with' : 'Face did not match' }
         });
       }
       return json({ result });
@@ -521,6 +670,25 @@ Deno.serve(async (req: Request) => {
 
 function round(n: number) {
   return Math.round(n * 1000) / 1000;
+}
+
+// missed presence check: time stops from when it was asked (counted as a
+// break) until they're back with a face check ('resume' above)
+// deno-lint-ignore no-explicit-any
+async function pauseForCheck(db: any, userId: string, fromIso: string) {
+  // a break taken after the check was asked is already off the clock
+  const { data: lastBreak } = await db
+    .from('breaks').select('ended_at').eq('user_id', userId).gte('ended_at', fromIso)
+    .order('ended_at', { ascending: false }).limit(1);
+  const from = lastBreak?.[0]?.ended_at && lastBreak[0].ended_at > fromIso ? lastBreak[0].ended_at : fromIso;
+  await db.from('employee_status').update({
+    status: 'on_break',
+    break_started_at: from,
+    paused_for_check: true,
+    updated_at: new Date().toISOString()
+  }).eq('user_id', userId).eq('status', 'clocked_in');
+  await db.from('breaks').update({ reason: 'missed_check' })
+    .eq('user_id', userId).is('ended_at', null);
 }
 
 // one-time challenge: read it and delete it, only if it's recent

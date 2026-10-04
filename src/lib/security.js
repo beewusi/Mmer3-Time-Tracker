@@ -26,15 +26,19 @@ export async function callClockCheck(action, payload = {}) {
   });
   if (error) {
     let message = error.message || 'The check couldn’t be completed.';
+    let code = null;
     if (error.context && typeof error.context.json === 'function') {
       try {
         const body = await error.context.json();
         if (body?.error) message = body.error;
+        code = body?.code || null;
       } catch {
         // not JSON, keep the generic one
       }
     }
-    throw new Error(message);
+    const err = new Error(message);
+    err.code = code;            // set when the clock-in was refused on purpose
+    throw err;
   }
   if (data?.error) throw new Error(data.error);
   return data;
@@ -48,7 +52,8 @@ export async function loadSecuritySettings() {
     presence_checks_per_session: 4,
     presence_window_minutes: 5,
     screenshots_per_hour: 3,
-    network_outage_on: null
+    network_outage_on: null,
+    network_mode: 'anywhere'
   };
 }
 

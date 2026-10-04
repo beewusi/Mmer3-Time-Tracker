@@ -7,11 +7,13 @@ import './FaceCheck.css';
 // Camera check used for registering a face, clocking in and presence checks.
 //   mode 'register'  3 good frames, averaged, duplicate check (blink asked for
 //                    but not required: the admin checks the photo)
-//   mode 'clockin'   eyes close + open, one frame, up to 2 tries, then "clock in anyway"
-//   mode 'presence'  same as clockin, "send anyway" after 2 tries
+//   mode 'clockin'   eyes close + open, one frame, up to 3 tries. Face seen but not
+//                    matching after 3: "Continue" (goes to Review). No face seen: no way past.
+//   mode 'resume'    same as clockin, back from a pause after a missed presence check
+//   mode 'presence'  same, "send anyway" after 3 tries
 // onDone({ descriptor, blink, attempts, photoBlob, noFace, matched, error })
 
-const MAX_TRIES = 2;
+const MAX_TRIES = 3;
 const BLINK_WAIT_MS = 10000;
 const STEADY_MS = 1500;       // facing the camera this long before the eyes step
 const SAMPLE_GAP_MS = 400;    // registration samples spread out a little
@@ -104,7 +106,13 @@ function FaceCheck({ mode = 'clockin', title, onDone, onCancel }) {
         // eyes shut can make the face harder to read; keep going mid-blink
         if (!closedSeen || blink) setHint(frame.problem);
         if (!baseline) { openReadings.length = 0; contrastReadings.length = 0; steadySince = null; }
-        if (!sawFace && elapsed > NO_FACE_GIVE_UP_MS) return finish({ noFace: true, attempts: tryNumber, blink: false });
+        if (!sawFace && elapsed > NO_FACE_GIVE_UP_MS) {
+          // clocking in / coming back can't go on without a face
+          if (mode === 'clockin' || mode === 'resume') {
+            return retry(tryNumber, 'No face was seen. Make sure the camera is on and you’re facing it in good light.', null);
+          }
+          return finish({ noFace: true, attempts: tryNumber, blink: false });
+        }
         await wait(60);
         continue;
       }
@@ -199,7 +207,8 @@ function FaceCheck({ mode = 'clockin', title, onDone, onCancel }) {
   }
 
   function retry(tryNumber, text, result) {
-    lastRef.current = result;
+    // a try with no face doesn't wipe a face seen on an earlier try
+    if (result) lastRef.current = result;
     setErrorText(text);
     setPhase(tryNumber >= MAX_TRIES && mode !== 'register' ? 'failed' : 'retry');
   }
@@ -222,7 +231,10 @@ function FaceCheck({ mode = 'clockin', title, onDone, onCancel }) {
     finish({ ...last, attempts, error: errorText });
   }
 
-  const anywayLabel = mode === 'presence' ? 'Send anyway' : 'Clock in anyway';
+  // clocking in / coming back: a face has to have been seen to carry on
+  const strict = mode === 'clockin' || mode === 'resume';
+  const canGoOn = !strict || !!lastRef.current?.descriptor;
+  const anywayLabel = mode === 'presence' ? 'Send anyway' : 'Continue';
   const heading = title || (mode === 'register' ? 'Set up your face check' : mode === 'presence' ? 'Presence check' : 'Face check');
 
   return (
@@ -274,12 +286,15 @@ function FaceCheck({ mode = 'clockin', title, onDone, onCancel }) {
         {phase === 'failed' && (
           <>
             <p className="face-check-error">{errorText}</p>
-            {mode !== 'register' && (
-              <p className="face-check-sub">You can still carry on. Your admin will be asked to look at it.</p>
+            {mode !== 'register' && canGoOn && (
+              <p className="face-check-sub">You can still carry on. Your admin will be asked to look at the photos.</p>
+            )}
+            {strict && !canGoOn && (
+              <p className="face-check-sub">The face check is needed to {mode === 'resume' ? 'carry on' : 'clock in'}. Turn the camera on, face it in good light and try again.</p>
             )}
             <div className="popup-buttons">
-              <button className="popup-cancel" onClick={handleCancel}>Cancel</button>
-              {mode !== 'register' && <button className="popup-confirm" onClick={goAnyway}>{anywayLabel}</button>}
+              <button className="popup-cancel" onClick={handleCancel}>{strict && !canGoOn ? 'Close' : 'Cancel'}</button>
+              {mode !== 'register' && canGoOn && <button className="popup-confirm" onClick={goAnyway}>{anywayLabel}</button>}
             </div>
           </>
         )}
@@ -287,12 +302,15 @@ function FaceCheck({ mode = 'clockin', title, onDone, onCancel }) {
         {phase === 'error' && (
           <>
             <p className="face-check-error">{errorText}</p>
-            {mode !== 'register' && (
+            {mode === 'presence' && (
               <p className="face-check-sub">You can still carry on. Your admin will be asked to look at it.</p>
             )}
+            {strict && (
+              <p className="face-check-sub">The face check is needed to {mode === 'resume' ? 'carry on' : 'clock in'}.</p>
+            )}
             <div className="popup-buttons">
-              <button className="popup-cancel" onClick={handleCancel}>Cancel</button>
-              {mode !== 'register' && (
+              <button className="popup-cancel" onClick={handleCancel}>{strict ? 'Close' : 'Cancel'}</button>
+              {mode === 'presence' && (
                 <button className="popup-confirm" onClick={() => finish({ noFace: true, blink: false, attempts: 0, error: errorText })}>
                   {anywayLabel}
                 </button>

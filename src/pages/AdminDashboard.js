@@ -35,7 +35,7 @@ function locationLabel(status) {
 
 // Declined sessions stay on the timesheet but don't count towards hours.
 function isCounted(record) {
-  return record.location_status !== 'declined';
+  return record.location_status !== 'declined' && !record.held_for_laptop;
 }
 
 // tooltip text for the collapsed sidebar
@@ -582,6 +582,9 @@ function AdminDashboard({ user, onLogout }) {
       break_started_at: null,
       break_accum_seconds: 0,
       location_status: 'authorised',
+      paused_for_check: false,
+      held_for_laptop: false,
+      held_device_id: null,
       break_2h_sent: false,
       break_3h_sent: false,
       clock_out_8h_sent: false,
@@ -630,6 +633,7 @@ function AdminDashboard({ user, onLogout }) {
       clock_in_at: current?.clock_in_at || new Date().toISOString(),
       break_started_at: null,
       break_accum_seconds: (current?.break_accum_seconds || 0) + additional,
+      paused_for_check: false,
       updated_at: new Date().toISOString()
     });
     await refreshStatuses();
@@ -640,7 +644,9 @@ function AdminDashboard({ user, onLogout }) {
       .from('employee_status').select('*').eq('user_id', employeeId).maybeSingle();
     const clockInAt = current?.clock_in_at ? new Date(current.clock_in_at) : new Date();
     const now = new Date();
-    const totalSeconds = Math.round((now - clockInAt) / 1000) - (current?.break_accum_seconds || 0);
+    // on a break (or paused): work stopped when it started
+    const workEnd = current?.status === 'on_break' && current.break_started_at ? new Date(current.break_started_at) : now;
+    const totalSeconds = Math.max(0, Math.round((workEnd - clockInAt) / 1000) - (current?.break_accum_seconds || 0));
 
     // Keeps the employee's clock-in location (was hardcoded to 'unavailable',
     // which showed N/A).
@@ -662,6 +668,7 @@ function AdminDashboard({ user, onLogout }) {
       break_started_at: null,
       break_accum_seconds: 0,
       location_status: null,
+      paused_for_check: false,
       updated_at: new Date().toISOString()
     });
 
@@ -2047,6 +2054,9 @@ function AdminDashboard({ user, onLogout }) {
                                   <span className={`location-tag location-tag-${record.location_status || 'unavailable'}`}>
                                     {locationLabel(record.location_status)}
                                   </span>
+                                  {record.held_for_laptop && (
+                                    <span className="location-tag location-tag-held" title="Counts once you approve their laptop on Devices">Held: laptop waiting</span>
+                                  )}
                                   {needsReview && <span className="timesheet-record-flag" title="Unauthorised location" />}
                                   {record.adjusted_by_admin && <span className="record-adjusted-tag">Adjusted by admin</span>}
                                   <span className="day-session-actions">

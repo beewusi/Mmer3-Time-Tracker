@@ -13,11 +13,13 @@ export const FLAG_LABELS = {
   contact_gap: 'App out of contact',
   unauthorised_location: 'Outside the office area',
   offline_clock_in: 'Clocked in offline',
-  no_checks: 'Clock-in checks not received'
+  no_checks: 'Clock-in checks not received',
+  device_pending: 'Laptop waiting for approval'
 };
 
 export const FLAG_STATUS = {
   open: { label: 'Waiting for review', tone: 'pending' },
+  noted: { label: 'Recorded', tone: 'neutral' },
   authorised: { label: 'Accepted', tone: 'active' },
   declined: { label: 'Declined', tone: 'danger' }
 };
@@ -37,6 +39,7 @@ export function flagSummary(flag) {
     case 'face_not_registered': return d.status === 'pending' ? 'Face waiting for approval' : d.status === 'withdrawn' ? 'Consent withdrawn' : '';
     case 'offline_clock_in': return d.claimed_at ? `Clocked in at ${new Date(d.claimed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} with no connection, sent ${d.minutes_late || 0} min later` : '';
     case 'no_checks': return 'Clocked in without the laptop, face and network checks reaching Mmerℇ';
+    case 'device_pending': return 'Hours count once the laptop is approved';
     default: return '';
   }
 }

@@ -102,7 +102,7 @@ function AdminSecuritySettings() {
           <div className="reminder-icon"><LaptopIcon width={18} height={18} /></div>
           <div className="reminder-info">
             <h3>Registered laptop</h3>
-            <p>Mark clock-ins from anyone without an approved work laptop. Turn off while people are still registering.</p>
+            <p>Clocking in needs a registered work laptop (Windows Hello / Touch ID). Off: anyone can clock in from any computer.</p>
           </div>
           <label className="toggle-switch">
             <input type="checkbox" checked={!!settings.require_registered_device} onChange={e => save({ require_registered_device: e.target.checked })} />
@@ -113,7 +113,7 @@ function AdminSecuritySettings() {
           <div className="reminder-icon"><FaceIcon width={18} height={18} /></div>
           <div className="reminder-info">
             <h3>Face check</h3>
-            <p>Camera check with a blink at clock-in and during presence checks.</p>
+            <p>Camera check with a blink at clock-in and during presence checks. Needed to clock in while on.</p>
           </div>
           <label className="toggle-switch">
             <input type="checkbox" checked={!!settings.face_check_enabled} onChange={e => save({ face_check_enabled: e.target.checked })} />
@@ -153,8 +153,25 @@ function AdminSecuritySettings() {
 
       <h2 className="reminders-subheading">Office networks</h2>
       <p className="admin-date sec-admin-note">
-        The office’s internet address. Clock-ins from anywhere else are marked “Not on the office network”. Add it from a computer in the office using “Add the network I’m on now”.
+        The office’s internet address. Laptops registered on it are approved straight away; registered anywhere else, they wait for you. Add it from a computer in the office using “Add the network I’m on now”.
       </p>
+      <div className="reminders-list sec-network-mode">
+        <div className="reminder-item">
+          <div className="reminder-icon"><WifiIcon width={18} height={18} /></div>
+          <div className="reminder-info">
+            <h3>Clocking in off the office network</h3>
+            <p>
+              {settings.network_mode === 'office_only'
+                ? 'Not allowed: people can only clock in on the office network (unless “Office network down today” is on).'
+                : 'Allowed: it’s just recorded on the session. Good while people work from different places.'}
+            </p>
+          </div>
+          <select className="admin-select" value={settings.network_mode || 'anywhere'} onChange={e => save({ network_mode: e.target.value })}>
+            <option value="anywhere">Anywhere, just recorded</option>
+            <option value="office_only">Office network only</option>
+          </select>
+        </div>
+      </div>
       <div className="reminders-list">
         {networks.map(n => (
           <div className="reminder-item" key={n.id}>
@@ -220,7 +237,7 @@ function AdminSecuritySettings() {
           <div className="reminder-info">
             <h3>Office network down today</h3>
             <p>
-              Internet or power out at the office and people are on mobile data? Switch this on and today’s clock-ins won’t be marked for the network. It switches itself off tomorrow.
+              Internet or power out at the office and people are on mobile data? Switch this on and today’s clock-ins aren’t checked against the network. It switches itself off tomorrow.
             </p>
           </div>
           <label className="toggle-switch">

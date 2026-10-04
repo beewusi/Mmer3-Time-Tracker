@@ -19,7 +19,7 @@ import DevicesSecurity from './DevicesSecurity';
 import MyActivity from './MyActivity';
 import {
   loadSecuritySettings, getMyFaceProfile, getClockInAssertion, callClockCheck,
-  uploadEvidence, getDeviceKey
+  uploadEvidence, getDeviceKey, listMyDevices
 } from '../lib/security';
 import { useSessionWatch, usePresenceChecks, askIdlePermission } from '../lib/useSessionWatch';
 import { PieChart, Pie, Cell, Tooltip } from 'recharts';
@@ -98,15 +98,15 @@ const EMPLOYEE_FAQ_ITEMS = [
   },
   {
     q: 'Why does Clock In ask for my face and Windows Hello / Touch ID?',
-    a: 'So nobody else can clock in for you. Windows Hello or Touch ID shows it’s your own work laptop, and the face check shows it’s you. Set both up once under Devices & Security; your admin approves them before they’re used.'
+    a: 'So nobody else can clock in for you. Windows Hello or Touch ID shows it’s your own work laptop, and the face check shows it’s you. Set both up once under Devices & Security; you can’t clock in until both are done. Your face is ready straight away. A laptop registered on the office network is too; registered anywhere else, your admin approves it, and until then you can still work but those hours are held.'
   },
   {
     q: 'The face check keeps failing. What do I do?',
-    a: 'Face a window or a light, move a little closer, take off anything covering your face and blink normally. After two tries you can still clock in with "Clock in anyway". Your admin will look at it. If it keeps happening, retake your face under Devices & Security.'
+    a: 'Face a window or a light, move a little closer, take off any cap, hat or sunglasses, and close your eyes for a second when asked. After three tries you can still clock in with "Continue", and your admin will look at the photos. If no face is seen at all, you can’t clock in. If it keeps failing, ask your admin to reset your face so you can retake it.'
   },
   {
     q: 'What is a presence check?',
-    a: 'A few times while you’re clocked in (about four times a day, at random), a blue bar asks you to show your face. You have 5 minutes. A missed check is marked for your admin. Checks don’t come during a break.'
+    a: 'A few times while you’re clocked in (about four times a day, at random), a blue bar asks you to show your face. You have 5 minutes. If you miss one, your time is paused from when it was asked until you click Carry on and do a face check. After an hour you’re clocked out at the time of the missed check. Checks don’t come during a break.'
   },
   {
     q: 'What does the desktop app do?',
@@ -114,15 +114,15 @@ const EMPLOYEE_FAQ_ITEMS = [
   },
   {
     q: 'Why is my session marked for review?',
-    a: 'Something didn’t add up, for example the face didn’t match, the laptop wasn’t verified, you weren’t on the office network or a presence check was missed. It’s not a penalty: your admin looks at it and accepts or declines it. You can see each one, and any note from your admin, on My Activity.'
+    a: 'The face check didn’t match at clock-in or at a presence check, so your admin looks at the photos and accepts or declines the session. It’s not a penalty. Other things, like clocking in off the office network or being away from the computer, are just recorded. You can see all of them, and any note from your admin, on My Activity.'
   },
   {
     q: 'What if the internet is down when I clock in?',
-    a: 'If Mmerℇ is already open, press Clock In anyway. The time is kept on your laptop and sent as soon as the connection is back, marked as an offline clock-in for your admin. Wait until you’re back online to clock out.'
+    a: 'If Mmerℇ is already open, press Clock In anyway. The time is kept on your laptop. When the connection is back, click Confirm clock-in and do the face check to send it (up to 6 hours later). Wait until it’s sent to clock out.'
   },
   {
     q: 'Can I stop the face check?',
-    a: 'Yes. Under Devices & Security, use "Withdraw consent". Your face data and photo are deleted straight away, and your admin will agree another way to confirm your clock-ins.'
+    a: 'Yes. Under Devices & Security, use "Withdraw consent". Your face data and photo are deleted straight away. Clocking in needs the face check, so speak to your admin about another way to confirm your clock-ins.'
   },
   {
     q: 'Where can I read how my information is used?',
@@ -133,8 +133,9 @@ const EMPLOYEE_FAQ_ITEMS = [
 // Where things are in the app, for the assistant (not shown on the FAQ page)
 const EMPLOYEE_APP_GUIDE = [
   'Menu (grouped): Overview — Dashboard, Timesheet, My Activity; Requests — Time Off; Settings — Reminders, Devices & Security; Help — FAQ. Profile opens from your name at the bottom of the menu; Sign Out is below it.',
-  'My Activity: one day at a time — clock-in checks (photo, laptop, face, network), presence checks, screenshots from the desktop app, away time, and anything marked for the admin with its status.',
-  'Devices & Security: register this work laptop (Windows Hello / Touch ID), set up, retake or withdraw the face check, see whether the desktop app is running.',
+  'My Activity: one day at a time — clock-in checks (photo, laptop, face, network), presence checks, screenshots from the desktop app, away time, and notes on the sessions (most just recorded; face mismatches wait for the admin).',
+  'Devices & Security: register this work laptop (Windows Hello / Touch ID) and set up the face check; both are needed before Clock In works. Face is ready straight away; a laptop registered off the office network waits for the admin (hours held meanwhile). Withdraw the face check; see whether the desktop app is running.',
+  'Clock In card: Clock In stays locked until setup is done. After a missed presence check time is paused; the Carry on button with a face check starts it again.',
   'Dashboard: Clock In card (Clock In, Break / Resume, Clock Out, location status), Planned Hours, Worked Hours (today and sessions), upcoming holidays and time off, Activities chart.',
   'Timesheet: Daily, Weekly, Monthly and All Records views. Click a day to see its work and break timeline. Read only for employees.',
   'Time Off: summary of pending, taken this year and next time off; request form with type, dates and reason; "Describe it instead" to fill the form from a sentence; your requests grouped as Pending, Upcoming and History, pending ones can be cancelled.',
@@ -152,9 +153,10 @@ function locationLabel(status) {
   return 'N/A';
 }
 
-// Declined sessions don't count towards totals.
+// Declined sessions don't count towards totals, nor do ones held until the
+// laptop is approved.
 function isCounted(record) {
-  return record.location_status !== 'declined';
+  return record.location_status !== 'declined' && !record.held_for_laptop;
 }
 
 // tooltip text for the collapsed sidebar
@@ -192,6 +194,13 @@ function Dashboard({ user, onLogout }) {
   // face check opened from Clock In; resolves with the result (null = cancelled)
   const [clockInFaceOpen, setClockInFaceOpen] = useState(false);
   const faceResolveRef = useRef(null);
+  const [faceMode, setFaceMode] = useState('clockin');   // clockin | resume
+  // face + laptop set up? null until loaded
+  const [setup, setSetup] = useState(null);
+  // paused after a missed presence check (when it was asked), null = not paused
+  const [pausedAt, setPausedAt] = useState(null);
+  // clocked in while offline, back online and waiting for the face check
+  const [offlinePending, setOfflinePending] = useState(null);
   const [presenceFaceOpen, setPresenceFaceOpen] = useState(false);
   const [presenceMessage, setPresenceMessage] = useState('');
   const [breakSeconds, setBreakSeconds] = useState(0);
@@ -343,6 +352,7 @@ function Dashboard({ user, onLogout }) {
   // (so a refresh keeps the session) and every 30s (picks up admin changes).
   // Location comes back from here too so a refresh doesn't lose it.
   function applyServerClockState(status) {
+    setPausedAt(status?.status === 'on_break' && status.paused_for_check ? status.break_started_at : null);
     if (!status || status.status === 'not_clocked_in' || status.status === 'clocked_out') {
       setIsClockedIn(false);
       setIsOnBreak(false);
@@ -624,39 +634,6 @@ function Dashboard({ user, onLogout }) {
     });
   }
 
-  async function saveRecord() {
-    // Location from employee_status first (survives a refresh and holds the
-    // admin's authorise/decline), local state as fallback.
-    // Hours and break from the server's clock_in_at + break total, so an
-    // admin edit to a live session is picked up and the local timer isn't trusted.
-    const serverStatus = await readEmployeeStatus();
-    const now = new Date();
-    const clockInAt = serverStatus?.clock_in_at ? new Date(serverStatus.clock_in_at) : null;
-    const breakTotal = clockInAt ? (serverStatus.break_accum_seconds || 0) : breakAccumSeconds;
-    const workedSeconds = clockInAt
-      ? Math.max(0, Math.round((now - clockInAt) / 1000) - breakTotal)
-      : seconds;
-    const newRecord = {
-      user_id: user.id,
-      date: now.toLocaleDateString('en-GB'),
-      clock_in: clockInAt ? dateToHHMM(clockInAt) : clockInTime,
-      clock_out: dateToHHMM(now),
-      hours_worked: formatTime(workedSeconds),
-      break_time: formatTime(breakTotal),
-      location_status: serverStatus?.location_status || locationStatus || 'unavailable'
-    };
-
-    const { data, error } = await supabase
-      .from('records')
-      .insert([newRecord])
-      .select();
-    if (!error && data) {
-      await loadRecords();
-    } else {
-      console.log('Failed to save:', error);
-    }
-  }
-
   function requestNotificationPermission() {
     if ('Notification' in window) {
       Notification.requestPermission();
@@ -692,22 +669,134 @@ function Dashboard({ user, onLogout }) {
 
   async function syncEmployeeStatus(status) {
     const row = { user_id: user.id, ...status, updated_at: new Date().toISOString() };
-    const { error } = await supabase.from('employee_status').upsert(row);
+    let { error } = await supabase.from('employee_status').upsert(row);
 
     // Retry without location_status if the column isn't there yet
     // (supabase/location_status.sql).
     if (error && String(error.message || '').includes('location_status')) {
       const withoutLocation = { ...row };
       delete withoutLocation.location_status;
-      await supabase.from('employee_status').upsert(withoutLocation);
+      ({ error } = await supabase.from('employee_status').upsert(withoutLocation));
+    }
+    // refused (e.g. paused after a missed check meanwhile): back to what the
+    // server has
+    if (error) {
+      setReminder(/PAUSED_FOR_CHECK/.test(error.message || '')
+        ? 'Your time was paused after a missed presence check. Click Carry on and do a face check.'
+        : 'That didn’t save. Please try again.');
+      await syncClockStateFromServer();
+    }
+    return !error;
+  }
+
+  function askFaceCheck(mode = 'clockin') {
+    return new Promise(resolve => {
+      faceResolveRef.current = resolve;
+      setFaceMode(mode);
+      setClockInFaceOpen(true);
+    });
+  }
+
+  // ---------- setup: face + laptop before clocking in ----------
+  async function loadSetup() {
+    if (!user) return;
+    const [settings, face, laptops] = await Promise.all([
+      loadSecuritySettings().catch(() => null),
+      getMyFaceProfile().catch(() => null),
+      listMyDevices(user.id).catch(() => [])
+    ]);
+    const live = laptops.filter(d => d.status === 'approved' || d.status === 'pending');
+    setSetup({
+      needFace: settings?.face_check_enabled !== false && face?.status !== 'approved',
+      needLaptop: settings?.require_registered_device !== false && !live.length,
+      laptopPending: !live.some(d => d.status === 'approved') && live.some(d => d.status === 'pending')
+    });
+  }
+
+  useEffect(() => {
+    if (!user) return undefined;
+    loadSetup();
+    // laptop approved by the admin: shows straight away
+    const channel = supabase
+      .channel(`my-devices-${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'devices', filter: `user_id=eq.${user.id}` }, () => { loadSetup(); loadRecords(); })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  // back from Devices & Security: setup may have changed
+  useEffect(() => {
+    if (activePage === 'dashboard') loadSetup();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePage]);
+
+  const setupMissing = setup
+    ? [setup.needLaptop && 'register this laptop', setup.needFace && 'set up your face check'].filter(Boolean)
+    : [];
+
+  // face (+ laptop passkey for a clock-in), what clock-check needs.
+  // null = cancelled or no face.
+  async function runChecks(mode) {
+    const settings = await loadSecuritySettings().catch(() => null);
+    let face = null;
+    if (settings?.face_check_enabled !== false) {
+      setClockInStep('Face check…');
+      face = await askFaceCheck(mode);
+      if (!face) return null;
+    }
+    let passkey = { assertion: null, error: null };
+    if (mode === 'clockin' && settings?.require_registered_device !== false) {
+      setClockInStep('Checking laptop…');
+      passkey = await getClockInAssertion();
+    }
+    const photoPath = mode === 'clockin' && face?.photoBlob ? await uploadEvidence(user.id, 'clockin', face.photoBlob) : null;
+    return {
+      face: face ? { descriptor: face.descriptor || null, blink: face.blink, attempts: face.attempts, noFace: !!face.noFace } : null,
+      assertion: passkey.assertion,
+      passkeyError: passkey.error,
+      photoPath,
+      deviceKey: getDeviceKey()
+    };
+  }
+
+  function afterClockIn(res, location) {
+    if (res.status) applyServerClockState(res.status);
+    else syncClockStateFromServer();
+    loadRecords();
+    if (res.faceResult === 'no_match') {
+      setReminder('You’re clocked in. The face check didn’t match, so your admin will look at the photos.');
+    } else if (res.laptopPending) {
+      setReminder('You’re clocked in. Your laptop is still waiting for your admin, so these hours will count once it’s approved.');
+    } else if (location === 'unauthorised') {
+      setReminder('You have been clocked in, but your location could not be verified as authorised. This has been flagged for admin review.');
+    } else {
+      setReminder('');
     }
   }
 
-  function askFaceCheck() {
-    return new Promise(resolve => {
-      faceResolveRef.current = resolve;
-      setClockInFaceOpen(true);
-    });
+  function clockInRefused(err) {
+    setReminder(err.message || 'You couldn’t be clocked in. Please try again.');
+    if (err.code === 'FACE_SETUP' || err.code === 'LAPTOP_SETUP') loadSetup();
+  }
+
+  // ---------- back from a pause (missed presence check) ----------
+  async function resumeFromPause() {
+    if (clockInInProgressRef.current) return;
+    clockInInProgressRef.current = true;
+    try {
+      const checks = await runChecks('resume');
+      if (!checks) return;
+      setClockInStep('Carrying on…');
+      const res = await callClockCheck('resume', { face: checks.face });
+      if (res.status) applyServerClockState(res.status);
+      setReminder('Welcome back. Your time is running again.');
+    } catch (err) {
+      setReminder(err.message || 'That didn’t work. Please try again.');
+    } finally {
+      clockInInProgressRef.current = false;
+      setClockInStep('');
+    }
   }
 
   function closeClockInFace(result) {
@@ -737,38 +826,30 @@ function Dashboard({ user, onLogout }) {
     setBreakAccumSeconds(0);
     setClockInTime(dateToHHMM(at));
     remindersFiredRef.current = { break2h: false, break3h: false, clockOut8h: false, autoClockOut: false };
-    setReminder('You’re offline. Your clock-in time is saved on this laptop and will be sent as soon as the connection is back. Your admin will see it was made offline.');
+    setReminder('You’re offline. Your clock-in time is saved on this laptop. When the connection is back, confirm it with a face check to send it.');
   }
 
+  // back online with an offline clock-in saved: it needs the face check
+  // before it's sent (Confirm button on the Clock In card)
   useEffect(() => {
     if (!user) return undefined;
-    let busy = false;
-    const send = async () => {
+    const look = () => {
       let saved = null;
       try { saved = JSON.parse(localStorage.getItem(offlineKey) || 'null'); } catch { saved = null; }
-      if (!saved || busy || !navigator.onLine) return;
-      busy = true;
-      try {
-        await callClockCheck('offline-clock-in', { clockInAt: saved.clockInAt, deviceKey: getDeviceKey() });
-        localStorage.removeItem(offlineKey);
-        setReminder('Back online. Your offline clock-in has been sent.');
-        syncClockStateFromServer();
-      } catch (err) {
-        // too old or refused: drop it and say so; network errors: try again later
-        if (navigator.onLine && !/fetch|network/i.test(err.message || '')) {
-          localStorage.removeItem(offlineKey);
-          setReminder(err.message);
-          syncClockStateFromServer();
-        }
-      }
-      busy = false;
+      if (!saved) { setOfflinePending(null); return; }
+      // still shows as clocked in after a refresh
+      const at = new Date(saved.clockInAt);
+      setIsClockedIn(true);
+      setClockInTime(dateToHHMM(at));
+      setSeconds(Math.max(0, Math.round((Date.now() - at.getTime()) / 1000)));
+      setOfflinePending(saved);
     };
-    send();
-    window.addEventListener('online', send);
-    const t = setInterval(send, 30000);
+    look();
+    window.addEventListener('online', look);
+    window.addEventListener('offline', look);
     return () => {
-      window.removeEventListener('online', send);
-      clearInterval(t);
+      window.removeEventListener('online', look);
+      window.removeEventListener('offline', look);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
@@ -779,83 +860,59 @@ function Dashboard({ user, onLogout }) {
       startOfflineClockIn();
       return;
     }
+    if (setupMissing.length) {
+      setReminder(`Before you can clock in, ${setupMissing.join(' and ')} in Devices & Security.`);
+      return;
+    }
     clockInInProgressRef.current = true;
     // needs the click itself, so before anything is awaited
     askIdlePermission();
     requestNotificationPermission();
 
     try {
-      // Face first. Cancelling it cancels the clock-in. Not set up yet or
-      // switched off = no camera, clock-check flags it if it should.
+      // face, then the laptop. Cancelling the face check cancels the clock-in.
       setClockInStep('Getting ready…');
-      const settings = await loadSecuritySettings().catch(() => null);
-      let face = null;
-      if (settings?.face_check_enabled !== false) {
-        const myFace = await getMyFaceProfile().catch(() => null);
-        if (myFace?.status === 'approved') {
-          setClockInStep('Face check…');
-          face = await askFaceCheck();
-          if (!face) return;
-        }
-      }
-
-      setClockInStep('Checking laptop…');
-      const passkey = await getClockInAssertion();
+      const checks = await runChecks('clockin');
+      if (!checks) return;
 
       setClockInStep('Checking location…');
       const location = await checkLocation();
 
-      setIsClockedIn(true);
-      setIsOnBreak(false);
-      setSeconds(0);
-      setBreakSeconds(0);
-      setClockInTime(dateToHHMM(new Date()));
-      setBreakAccumSeconds(0);
-      // New session, reset the reminder flags.
-      remindersFiredRef.current = {
-        break2h: false,
-        break3h: false,
-        clockOut8h: false,
-        autoClockOut: false
-      };
-
-      // Unauthorised location doesn't block clock-in. It's flagged for the admin
-      // to authorise or decline.
-      if (location === 'unauthorised') {
-        setReminder('You have been clocked in, but your location could not be verified as authorised. This has been flagged for admin review.');
-      }
-
-      // Written to employee_status so the admin sees the clock-in and location
-      // straight away. Reminder-sent flags reset for reminder-sweep.
-      await syncEmployeeStatus({
-        status: 'clocked_in',
-        clock_in_at: new Date().toISOString(),
-        break_started_at: null,
-        break_accum_seconds: 0,
-        location_status: location,
-        break_2h_sent: false,
-        break_3h_sent: false,
-        clock_out_8h_sent: false,
-        auto_clock_out_sent: false
-      });
-
-      // What was checked, sent once the session exists (it gives the session id).
-      // Doesn't hold up the clock-in.
+      // clock-check decides and starts the session
+      setClockInStep('Clocking in…');
+      const res = await callClockCheck('clock-in', { ...checks, locationStatus: location });
+      afterClockIn(res, location);
+    } catch (err) {
+      clockInRefused(err);
+    } finally {
+      clockInInProgressRef.current = false;
       setClockInStep('');
-      const photoPath = face?.photoBlob ? await uploadEvidence(user.id, 'clockin', face.photoBlob) : null;
-      callClockCheck('clock-in', {
-        assertion: passkey.assertion,
-        passkeyError: passkey.error,
-        face: face ? { descriptor: face.descriptor || null, blink: face.blink, attempts: face.attempts, noFace: !!face.noFace } : null,
-        photoPath,
-        deviceKey: getDeviceKey(),
-        locationStatus: location
-      }).then(result => {
-        const setupMissing = (result?.flags || []).some(f => f === 'device_unregistered' || f === 'face_not_registered');
-        if (setupMissing && location !== 'unauthorised') {
-          setReminder('You’re clocked in. Finish setting up Devices & Security so your clock-ins don’t need checking by your admin.');
-        }
-      }).catch(err => console.log('Clock-in checks not saved:', err.message));
+    }
+  }
+
+  // clocked in offline, now back: face + laptop, then sent with the time it
+  // was made
+  async function confirmOfflineClockIn() {
+    if (!offlinePending || clockInInProgressRef.current) return;
+    clockInInProgressRef.current = true;
+    try {
+      const checks = await runChecks('clockin');
+      if (!checks) return;
+      setClockInStep('Sending…');
+      const res = await callClockCheck('clock-in', { ...checks, clockInAt: offlinePending.clockInAt });
+      try { localStorage.removeItem(offlineKey); } catch { /* nothing saved */ }
+      setOfflinePending(null);
+      afterClockIn(res, 'unavailable');
+      setReminder(res.alreadyLive
+        ? 'You were already clocked in, so the offline clock-in wasn’t needed.'
+        : 'Your offline clock-in has been sent. Your admin will check it, as it was made offline.');
+    } catch (err) {
+      if (err.code === 'OFFLINE_TOO_OLD') {
+        try { localStorage.removeItem(offlineKey); } catch { /* nothing saved */ }
+        setOfflinePending(null);
+        applyServerClockState(null);
+      }
+      clockInRefused(err);
     } finally {
       clockInInProgressRef.current = false;
       setClockInStep('');
@@ -880,29 +937,25 @@ function Dashboard({ user, onLogout }) {
     clockOutInProgressRef.current = true;
     setShowEarlyClockOut(false);
 
-    // Save the record before clearing employee_status, otherwise the location
-    // is already gone.
-    await saveRecord();
-    setIsClockedIn(false);
-    setIsOnBreak(false);
-    setTimeout(() => {
-      setSeconds(0);
-      setBreakSeconds(0);
-    }, 500);
-    setReminder('');
-
-    await syncEmployeeStatus({
-      status: 'clocked_out',
-      clock_in_at: null,
-      break_started_at: null,
-      break_accum_seconds: 0,
-      location_status: null
-    });
+    // clock-check works out the hours and saves the session
+    try {
+      await callClockCheck('clock-out');
+      applyServerClockState(null);
+      setReminder('');
+      loadRecords();
+    } catch (err) {
+      setReminder(err.message || 'You couldn’t be clocked out. Please try again.');
+      syncClockStateFromServer();
+    }
     clockOutInProgressRef.current = false;
   }
 
   async function handleBreak() {
     if (!isClockedIn) return;
+    if (isOnBreak && pausedAt) {
+      resumeFromPause();
+      return;
+    }
     if (!isOnBreak) {
       setShowBreakConfirm(true);
     } else {
@@ -1552,7 +1605,8 @@ function Dashboard({ user, onLogout }) {
 
       {clockInFaceOpen && (
         <FaceCheck
-          mode="clockin"
+          mode={faceMode}
+          title={faceMode === 'resume' ? 'Face check to carry on' : undefined}
           onDone={result => closeClockInFace(result)}
           onCancel={() => closeClockInFace(null)}
         />
@@ -1565,7 +1619,12 @@ function Dashboard({ user, onLogout }) {
             setPresenceFaceOpen(false);
             try {
               const res = await answerPresenceCheck(presenceCheck, result);
-              setPresenceMessage(res?.result === 'passed' ? 'Presence check done. Thanks.' : 'Presence check sent. It didn’t match, so your admin will take a look.');
+              setPresenceMessage(res?.result === 'passed'
+                ? 'Presence check done. Thanks.'
+                : res?.result === 'missed'
+                  ? 'No face was seen, so your time is paused. Click Carry on when you’re back.'
+                  : 'Presence check sent. It didn’t match, so your admin will take a look.');
+              syncClockStateFromServer();
             } catch (err) {
               setPresenceMessage(err.message || 'The presence check couldn’t be sent.');
             }
@@ -1717,7 +1776,7 @@ function Dashboard({ user, onLogout }) {
                   <ClockIcon width={17} height={17} className="card-icon" />
                   <span className="card-title">Clock In</span>
                   <span className={`card-status-badge status-${status.tone}`}>
-                    {isClockedIn ? (isOnBreak ? 'On Break' : 'Ongoing') : 'Inactive'}
+                    {isClockedIn ? (isOnBreak ? (pausedAt ? 'Paused' : 'On Break') : 'Ongoing') : 'Inactive'}
                   </span>
                 </div>
                 {locationStatus && (
@@ -1727,19 +1786,47 @@ function Dashboard({ user, onLogout }) {
                 )}
                 <div className="card-timer">{formatTime(seconds)}</div>
                 {isOnBreak && (
-                  <div className="break-timer"><CoffeeIcon width={13} height={13} /> Break: {formatTime(breakSeconds)}</div>
+                  <div className="break-timer"><CoffeeIcon width={13} height={13} /> {pausedAt ? 'Paused' : 'Break'}: {formatTime(breakSeconds)}</div>
                 )}
                 <div className="card-buttons">
-                  <button className="btn-clockin" onClick={handleClockIn} disabled={isClockedIn || !!clockInStep}>
-                    {clockInStep || 'Clock In'}
+                  <button className="btn-clockin" onClick={handleClockIn} disabled={isClockedIn || !!clockInStep || setupMissing.length > 0}>
+                    {(!isClockedIn && clockInStep) || 'Clock In'}
                   </button>
-                  <button className="btn-break" onClick={handleBreak} disabled={!isClockedIn}>
-                    {isOnBreak ? 'Resume' : 'Break'}
+                  <button className="btn-break" onClick={handleBreak} disabled={!isClockedIn || !!offlinePending || (pausedAt && !!clockInStep)}>
+                    {isOnBreak ? (pausedAt ? (clockInStep || 'Carry on') : 'Resume') : 'Break'}
                   </button>
                   {!isOnBreak && isClockedIn && (
-                    <button className="btn-clockout" onClick={handleClockOut} disabled={showEarlyClockOut}>Clock Out</button>
+                    <button className="btn-clockout" onClick={handleClockOut} disabled={showEarlyClockOut || !!offlinePending}>Clock Out</button>
                   )}
                 </div>
+                {!isClockedIn && setupMissing.length > 0 && (
+                  <div className="clock-note">
+                    <span>Before you can clock in, {setupMissing.join(' and ')}.</span>
+                    <button className="clock-note-link" onClick={() => setActivePage('security')}>Open Devices &amp; Security</button>
+                  </div>
+                )}
+                {isOnBreak && pausedAt && (
+                  <div className="clock-note clock-note-warning">
+                    <span>Time paused: you missed a presence check at {dateToHHMM(new Date(pausedAt))}. Click Carry on and do a face check to start it again.</span>
+                  </div>
+                )}
+                {offlinePending && (
+                  <div className="clock-note clock-note-warning">
+                    {navigator.onLine ? (
+                      <>
+                        <span>You clocked in offline at {dateToHHMM(new Date(offlinePending.clockInAt))}. Confirm it with a face check to send it.</span>
+                        <button className="clock-note-link" onClick={confirmOfflineClockIn} disabled={!!clockInStep}>{clockInStep || 'Confirm clock-in'}</button>
+                      </>
+                    ) : (
+                      <span>You clocked in offline at {dateToHHMM(new Date(offlinePending.clockInAt))}. When you’re back online, confirm it with a face check to send it.</span>
+                    )}
+                  </div>
+                )}
+                {setup?.laptopPending && !offlinePending && (
+                  <div className="clock-note">
+                    <span>Your laptop is waiting for your admin. You can work as normal; your hours count once it’s approved.</span>
+                  </div>
+                )}
               </div>
 
               {/* Card 2: Planned Hours */}
@@ -2062,6 +2149,9 @@ function Dashboard({ user, onLogout }) {
                             <span className={`location-tag location-tag-${record.location_status || 'unavailable'}`}>
                               {locationLabel(record.location_status)}
                             </span>
+                            {record.held_for_laptop && (
+                              <span className="location-tag location-tag-held" title="Counts once your admin approves your laptop">Held</span>
+                            )}
                           </div>
                           <SessionTimeline session={recordToSession(record)} />
                         </div>

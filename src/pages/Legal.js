@@ -75,12 +75,12 @@ const PRIVACY = {
           <ul className="legal-list">
             <li>The face check is set up only after you tick the consent box. The date you agreed and the version of this notice are saved.</li>
             <li>Your face template is used for one thing: confirming it's you clocking in and answering presence checks. It is not used to identify you anywhere else, and it is never shared or sold.</li>
-            <li>The comparison runs on your own computer. Photos and templates are not sent to any outside face-recognition service.</li>
+            <li>Your face is turned into numbers on your own computer and compared on Mmerℇ's own server. Photos and templates are not sent to any outside face-recognition service.</li>
             <li>One face per person. A face that is already registered to another account can't be registered again.</li>
-            <li>A new or changed face is checked by an administrator before it is used.</li>
-            <li>If the check doesn't recognise you after two tries, you can still clock in. The session is flagged for an administrator to look at, never stopped automatically.</li>
+            <li>A new face is accepted automatically once the photo passes the checks (one face, facing the camera, good light). An administrator can see the photo and ask for a new one.</li>
+            <li>Clocking in needs the face check. If it doesn't recognise you after three tries, you can still clock in, and the photos go to an administrator to look at.</li>
           </ul>
-          <p>You can withdraw your consent at any time by contacting <Contact />. Your face template and setup photo are then deleted, and your organisation will agree another way for you to confirm your clock-ins.</p>
+          <p>You can withdraw your consent at any time from Devices &amp; Security or by contacting <Contact />. Your face template and setup photo are then deleted, and your organisation will agree another way for you to confirm your clock-ins.</p>
         </>
       )
     },
@@ -200,11 +200,12 @@ const TERMS = {
       body: (
         <>
           <ul className="legal-list">
-            <li>Answer presence checks within five minutes. A missed check is flagged.</li>
-            <li>If your organisation uses the desktop app, keep it running while you're clocked in. Long gaps with no contact from the app are flagged.</li>
-            <li>Time when your computer is idle or locked for a long stretch may be flagged.</li>
+            <li>Clock in from your own registered work laptop, with the face check. A laptop registered away from the office network is approved by an administrator; until then your hours are held and count once it's approved.</li>
+            <li>Answer presence checks within five minutes. If you miss one, your time is paused from when it was asked until you do a face check to carry on. After an hour you're clocked out at the time of the missed check.</li>
+            <li>If your organisation uses the desktop app, keep it running while you're clocked in. Long gaps with no contact from the app are recorded.</li>
+            <li>Time when your computer is idle or locked for a long stretch is recorded.</li>
           </ul>
-          <p>A flag is not a penalty. It asks an administrator to look at the session and authorise or decline it. How these checks work, and what is saved, is explained in the Privacy Notice.</p>
+          <p>Most of this is just recorded on your session. Only face checks that don't match are sent to an administrator to authorise or decline. How these checks work, and what is saved, is explained in the Privacy Notice.</p>
         </>
       )
     },

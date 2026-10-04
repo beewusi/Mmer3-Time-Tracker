@@ -204,7 +204,9 @@ function MyActivity({ user, userId, admin = false, heading, headerActions, picke
                   <div className="reminder-info">
                     <h3>Asked at {dateToHHMM(new Date(c.due_at))}</h3>
                     <p>
-                      {c.responded_at ? `Answered at ${dateToHHMM(new Date(c.responded_at))}` : 'Not answered'}
+                      {c.result === 'missed' || expired
+                        ? 'Not answered · time paused from then until the next face check'
+                        : c.responded_at ? `Answered at ${dateToHHMM(new Date(c.responded_at))}` : 'Not answered'}
                       {c.answered_from ? ` · from the ${c.answered_from === 'desktop' ? 'desktop app' : 'web app'}` : ''}
                     </p>
                   </div>
@@ -253,8 +255,8 @@ function MyActivity({ user, userId, admin = false, heading, headerActions, picke
 
       {flags.length > 0 && (
         <>
-          <h2 className="reminders-subheading">{admin ? 'Flags' : 'Marked for your admin'}</h2>
-          {!admin && <p className="page-date reminders-subnote">These aren’t penalties. Your admin looks at each one and accepts or declines it.</p>}
+          <h2 className="reminders-subheading">{admin ? 'Flags' : 'Notes on your sessions'}</h2>
+          {!admin && <p className="page-date reminders-subnote">These aren’t penalties. Most are just recorded. Only face checks that didn’t match go to your admin to accept or decline.</p>}
           <div className="reminders-list">
             {flags.map(f => {
               const info = FLAG_STATUS[f.status] || FLAG_STATUS.open;

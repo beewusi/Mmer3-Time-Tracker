@@ -188,7 +188,8 @@ create policy "face_admin_all" on public.face_profiles
   using ((auth.jwt() ->> 'email') = 'admin@mmer3.com')
   with check ((auth.jwt() ->> 'email') = 'admin@mmer3.com');
 
--- a new or changed face goes back to pending until the admin approves it
+-- the browser can't set the status itself; save_face_profile approves it
+-- once its checks pass (mmer3.face_save is set inside that function only)
 create or replace function public.protect_face_profile()
 returns trigger
 language plpgsql
@@ -204,6 +205,10 @@ begin
   -- withdrawing: only with the numbers and photo gone
   if new.status = 'withdrawn' and new.descriptor = '{}' and new.photo_path is null then
     new.approved_at := null;
+    new.updated_at := now();
+    return new;
+  end if;
+  if current_setting('mmer3.face_save', true) = 'on' then
     new.updated_at := now();
     return new;
   end if;
@@ -271,8 +276,10 @@ $$;
 revoke execute on function public.face_registered_to_other(float8[]) from public, anon;
 grant execute on function public.face_registered_to_other(float8[]) to authenticated;
 
--- save (or retake) my face: checked here, not just in the browser.
--- Retake only while pending, rejected or withdrawn.
+-- save (or retake) my face: checked here, not just in the browser
+-- (one face, straight on, light are checked by the camera step). Approved
+-- straight away if it isn't someone else's face. Retake only after the admin
+-- resets it, or after withdrawing.
 create or replace function public.save_face_profile(probe float8[], photo text, version text)
 returns void
 language plpgsql
@@ -300,14 +307,17 @@ begin
     raise exception 'FACE_TAKEN:%', other;
   end if;
 
-  insert into face_profiles (user_id, descriptor, photo_path, consent_at, consent_version, status)
-  values (auth.uid(), probe, photo, now(), coalesce(version, '2026-10-03'), 'pending')
+  perform set_config('mmer3.face_save', 'on', true);
+  insert into face_profiles (user_id, descriptor, photo_path, consent_at, consent_version, status, approved_at)
+  values (auth.uid(), probe, photo, now(), coalesce(version, '2026-10-03'), 'approved', now())
   on conflict (user_id) do update
     set descriptor = excluded.descriptor,
         photo_path = excluded.photo_path,
         consent_at = excluded.consent_at,
         consent_version = excluded.consent_version,
-        status = 'pending';
+        status = 'approved',
+        approved_at = now();
+  perform set_config('mmer3.face_save', 'off', true);
 end;
 $$;
 
@@ -382,12 +392,12 @@ create table if not exists public.session_flags (
   type text not null check (type in (
     'device_unregistered', 'device_not_verified', 'face_failed', 'face_not_registered',
     'off_network', 'same_device', 'presence_missed', 'presence_failed',
-    'away', 'contact_gap', 'unauthorised_location', 'offline_clock_in', 'no_checks'
+    'away', 'contact_gap', 'unauthorised_location', 'offline_clock_in', 'no_checks', 'device_pending'
   )),
   severity text not null default 'medium' check (severity in ('low', 'medium', 'high')),
   details jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
-  status text not null default 'open' check (status in ('open', 'authorised', 'declined')),
+  status text not null default 'open',
   decided_at timestamptz,
   admin_note text
 );
@@ -395,7 +405,7 @@ alter table public.session_flags drop constraint if exists session_flags_type_ch
 alter table public.session_flags add constraint session_flags_type_check check (type in (
   'device_unregistered', 'device_not_verified', 'face_failed', 'face_not_registered',
   'off_network', 'same_device', 'presence_missed', 'presence_failed',
-  'away', 'contact_gap', 'unauthorised_location', 'offline_clock_in', 'no_checks'
+  'away', 'contact_gap', 'unauthorised_location', 'offline_clock_in', 'no_checks', 'device_pending'
 ));
 create index if not exists session_flags_session_idx on public.session_flags (session_id);
 create index if not exists session_flags_open_idx on public.session_flags (status, created_at);
@@ -408,7 +418,7 @@ create policy "flags_select_own" on public.session_flags
 drop policy if exists "flags_insert_own" on public.session_flags;
 create policy "flags_insert_own" on public.session_flags
   for insert to authenticated
-  with check (auth.uid() = user_id and status = 'open' and decided_at is null and type in ('away'));
+  with check (auth.uid() = user_id and status in ('open', 'noted') and decided_at is null and type in ('away'));
 drop policy if exists "flags_admin_all" on public.session_flags;
 create policy "flags_admin_all" on public.session_flags
   for all to authenticated
@@ -738,6 +748,204 @@ begin
   -- signed out straight away when the account is removed
   begin
     alter publication supabase_realtime add table public.profiles;
+  exception when duplicate_object then null;
+  end;
+end $$;
+
+-- =====================================================================
+-- Fewer approvals, real blocks (4 Oct)
+-- Setup is automatic: faces approved when saved, laptops approved when
+-- registered on an office network. Clock-ins only start through
+-- clock-check, after the face and laptop checks. Only face mismatches wait
+-- for the admin; everything else is just recorded.
+-- =====================================================================
+
+-- Office network only, or anywhere (just recorded)
+alter table public.security_settings add column if not exists network_mode text not null default 'anywhere';
+alter table public.security_settings drop constraint if exists security_settings_network_mode_check;
+alter table public.security_settings add constraint security_settings_network_mode_check
+  check (network_mode in ('anywhere', 'office_only'));
+
+-- laptops: where it was registered from, and how it got approved
+alter table public.devices add column if not exists registered_ip text;
+alter table public.devices add column if not exists approved_how text;   -- 'office_network' or 'admin'
+
+-- faces still waiting from before: approved now (setup is automatic)
+update public.face_profiles set status = 'approved', approved_at = coalesce(approved_at, now())
+ where status = 'pending';
+
+-- paused after a missed presence check; only clock-check can resume it
+alter table public.employee_status add column if not exists paused_for_check boolean not null default false;
+alter table public.breaks add column if not exists reason text;   -- null = normal break, 'missed_check' = paused
+
+-- hours from a laptop still waiting for the admin: held, counted once that
+-- laptop is approved. Decided at clock-in from the laptop that passed the
+-- check (clock-check sets it on employee_status), copied to the record.
+alter table public.employee_status add column if not exists held_for_laptop boolean not null default false;
+alter table public.employee_status add column if not exists held_device_id uuid;
+alter table public.records add column if not exists held_for_laptop boolean not null default false;
+alter table public.records add column if not exists held_device_id uuid;
+
+create or replace function public.hold_record_for_laptop()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  live record;
+begin
+  select held_for_laptop, held_device_id into live
+    from employee_status
+   where user_id::text = new.user_id::text and status in ('clocked_in', 'on_break');
+  new.held_for_laptop := coalesce(live.held_for_laptop, false);
+  new.held_device_id := case when coalesce(live.held_for_laptop, false) then live.held_device_id end;
+  return new;
+end;
+$$;
+
+revoke execute on function public.hold_record_for_laptop() from public, anon, authenticated;
+
+drop trigger if exists hold_record_for_laptop on public.records;
+create trigger hold_record_for_laptop
+  before insert on public.records
+  for each row execute function public.hold_record_for_laptop();
+
+-- that laptop approved: its held hours count now (and a session still
+-- running on it stops being held)
+create or replace function public.release_held_records()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.status = 'approved' and old.status is distinct from 'approved' then
+    update records set held_for_laptop = false
+     where held_device_id = new.id and held_for_laptop;
+    perform set_config('mmer3.release', 'on', true);
+    update employee_status set held_for_laptop = false
+     where held_device_id = new.id and held_for_laptop;
+    perform set_config('mmer3.release', 'off', true);
+  end if;
+  return new;
+end;
+$$;
+
+revoke execute on function public.release_held_records() from public, anon, authenticated;
+
+drop trigger if exists release_held_records on public.devices;
+create trigger release_held_records
+  after update on public.devices
+  for each row execute function public.release_held_records();
+
+-- sessions are saved at clock-out by clock-check (hours worked out there),
+-- not by the browser
+drop policy if exists "records_insert_own" on public.records;
+
+-- Only face mismatches (and clock-ins sent later from offline, whose time
+-- can't be checked) wait for the admin. Everything else is recorded on the
+-- session ('noted') with nothing to decide.
+alter table public.session_flags drop constraint if exists session_flags_status_check;
+alter table public.session_flags add constraint session_flags_status_check
+  check (status in ('open', 'noted', 'authorised', 'declined'));
+
+create or replace function public.note_minor_flags()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if new.status = 'open' and new.type not in ('face_failed', 'presence_failed', 'offline_clock_in') then
+    new.status := 'noted';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists note_minor_flags on public.session_flags;
+create trigger note_minor_flags
+  before insert on public.session_flags
+  for each row execute function public.note_minor_flags();
+
+update public.session_flags set status = 'noted'
+ where status = 'open' and type not in ('face_failed', 'presence_failed', 'offline_clock_in');
+
+-- employee_status: a session only starts through clock-check (face +
+-- laptop checked there), and a pause after a missed presence check only
+-- ends there (face again). Breaks, resuming a normal break and clocking out
+-- stay as they were. Admin, service role and the SQL editor skip this.
+-- (Replaces the version in security_hardening.sql.)
+create or replace function public.protect_employee_status()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if coalesce(auth.jwt() ->> 'email', '') = 'admin@mmer3.com'
+     or coalesce(auth.jwt() ->> 'role', '') = 'service_role'
+     or auth.uid() is null
+     or current_setting('mmer3.release', true) = 'on' then   -- laptop approved (release_held_records)
+    return new;
+  end if;
+
+  -- upsert fires the insert trigger first even when the row exists
+  if tg_op = 'INSERT'
+     and exists (select 1 from employee_status where user_id = new.user_id) then
+    return new;
+  end if;
+
+  if tg_op = 'UPDATE'
+     and old.status in ('clocked_in', 'on_break')
+     and new.status in ('clocked_in', 'on_break') then
+    new.clock_in_at := old.clock_in_at;
+    new.location_status := old.location_status;
+    new.held_for_laptop := old.held_for_laptop;
+    new.held_device_id := old.held_device_id;
+    -- a break they start themselves is never a pause
+    new.paused_for_check := case when old.status = 'clocked_in' then false else old.paused_for_check end;
+
+    if old.status = 'on_break' and new.status = 'clocked_in' and old.paused_for_check then
+      raise exception 'PAUSED_FOR_CHECK';
+    end if;
+
+    if old.status = 'clocked_in' and new.status = 'on_break' then
+      new.break_started_at := now();
+      new.break_accum_seconds := coalesce(old.break_accum_seconds, 0);
+    elsif old.status = 'on_break' and new.status = 'clocked_in' then
+      new.break_started_at := null;
+      new.break_accum_seconds := coalesce(old.break_accum_seconds, 0)
+        + greatest(0, round(extract(epoch from (now() - coalesce(old.break_started_at, now())))))::int;
+    else
+      new.break_started_at := old.break_started_at;
+      new.break_accum_seconds := coalesce(old.break_accum_seconds, 0);
+    end if;
+    return new;
+  end if;
+
+  -- a new session from the browser: not allowed, it goes through clock-check
+  if new.status in ('clocked_in', 'on_break') then
+    raise exception 'CLOCK_IN_NEEDS_CHECKS';
+  end if;
+
+  -- clocking out (also from a pause)
+  new.paused_for_check := false;
+  new.held_for_laptop := false;
+  new.held_device_id := null;
+  return new;
+end;
+$$;
+
+drop trigger if exists protect_employee_status on public.employee_status;
+create trigger protect_employee_status
+  before insert or update on public.employee_status
+  for each row execute function public.protect_employee_status();
+
+-- employees see their laptop approved without refreshing
+do $$
+begin
+  begin
+    alter publication supabase_realtime add table public.devices;
   exception when duplicate_object then null;
   end;
 end $$;

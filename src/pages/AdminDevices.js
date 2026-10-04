@@ -8,7 +8,7 @@ import './Security.css';
 // Devices: approve work laptops and face photos. Waiting ones first, with
 // "approve all" for the first week when everyone registers at once.
 
-const STATUS_TEXT = { pending: 'Waiting', approved: 'Approved', rejected: 'Not accepted', revoked: 'Removed', withdrawn: 'Consent withdrawn' };
+const STATUS_TEXT = { pending: 'Waiting', approved: 'Approved', rejected: 'Retake asked', revoked: 'Removed', withdrawn: 'Consent withdrawn' };
 const STATUS_TONE = { pending: 'pending', approved: 'active', rejected: 'danger', revoked: 'neutral', withdrawn: 'neutral' };
 
 function FacePhoto({ path }) {
@@ -34,7 +34,7 @@ function AdminDevices({ employees, headerActions, onPendingCountChange }) {
 
   const load = useCallback(async () => {
     const [d, f] = await Promise.all([
-      supabase.from('devices').select('id, user_id, label, status, created_at, approved_at, last_used_at, synced').neq('status', 'revoked').order('created_at', { ascending: false }),
+      supabase.from('devices').select('id, user_id, label, status, created_at, approved_at, approved_how, registered_ip, last_used_at, synced').neq('status', 'revoked').order('created_at', { ascending: false }),
       supabase.from('face_profiles').select('user_id, status, photo_path, consent_at, updated_at, approved_at').order('updated_at', { ascending: false })
     ]);
     setDevices(d.data || []);
@@ -45,11 +45,10 @@ function AdminDevices({ employees, headerActions, onPendingCountChange }) {
   useEffect(() => { load(); }, [load]);
 
   const pendingDevices = devices.filter(d => d.status === 'pending');
-  const pendingFaces = faces.filter(f => f.status === 'pending');
 
   useEffect(() => {
-    if (!loading && onPendingCountChange) onPendingCountChange(pendingDevices.length + pendingFaces.length);
-  }, [loading, pendingDevices.length, pendingFaces.length, onPendingCountChange]);
+    if (!loading && onPendingCountChange) onPendingCountChange(pendingDevices.length);
+  }, [loading, pendingDevices.length, onPendingCountChange]);
 
   function name(userId) {
     const e = employees.find(x => x.id === userId);
@@ -68,10 +67,14 @@ function AdminDevices({ employees, headerActions, onPendingCountChange }) {
   const setDevice = (ids, status) => run(ids.length > 1 ? 'all-devices' : ids[0], () =>
     status === 'revoked'
       ? supabase.from('devices').delete().in('id', ids)
-      : supabase.from('devices').update({ status, approved_at: status === 'approved' ? new Date().toISOString() : null }).in('id', ids));
+      : supabase.from('devices').update({
+        status,
+        approved_at: status === 'approved' ? new Date().toISOString() : null,
+        approved_how: status === 'approved' ? 'admin' : null
+      }).in('id', ids));
 
-  // only the version on screen: if the employee retook their face meanwhile,
-  // updated_at has changed and nothing is approved
+  // reset = they're asked for a new photo. Only the version on screen: if
+  // they retook it meanwhile, updated_at has changed and nothing happens
   const setFace = (list, status) => run(list.length > 1 ? 'all-faces' : `face-${list[0].user_id}`, async () => {
     let changed = 0;
     for (const f of list) {
@@ -82,13 +85,13 @@ function AdminDevices({ employees, headerActions, onPendingCountChange }) {
       if (error) return { error };
       changed += (data || []).length;
     }
-    if (changed < list.length) return { error: { message: 'A face was retaken while this page was open. Look at the new photo before approving.' } };
+    if (changed < list.length) return { error: { message: 'A face was retaken while this page was open. Look at the new photo first.' } };
     return { error: null };
   });
 
   // how many laptops each person has (more than one is worth a look)
   const perUser = devices.reduce((m, d) => ({ ...m, [d.user_id]: (m[d.user_id] || 0) + 1 }), {});
-  const withoutLaptop = employees.filter(e => !devices.some(d => d.user_id === e.id && d.status === 'approved'));
+  const withoutLaptop = employees.filter(e => !devices.some(d => d.user_id === e.id && (d.status === 'approved' || d.status === 'pending')));
   const withoutFace = employees.filter(e => !faces.some(f => f.user_id === e.id && f.status === 'approved'));
 
   return (
@@ -96,7 +99,7 @@ function AdminDevices({ employees, headerActions, onPendingCountChange }) {
       <div className="admin-header">
         <div>
           <h1>Devices</h1>
-          <p className="admin-date">Approve work laptops and face photos before they’re used at clock-in</p>
+          <p className="admin-date">Faces, and laptops registered on the office network, are approved automatically. Laptops registered anywhere else wait here.</p>
         </div>
         {headerActions}
       </div>
@@ -105,8 +108,8 @@ function AdminDevices({ employees, headerActions, onPendingCountChange }) {
 
       <div className="admin-stats sec-admin-stats">
         <div className="admin-stat-card"><p className="admin-stat-label">Laptops waiting</p><p className={`admin-stat-value ${pendingDevices.length ? 'stat-warning' : 'stat-muted'}`}>{pendingDevices.length}</p></div>
-        <div className="admin-stat-card"><p className="admin-stat-label">Faces waiting</p><p className={`admin-stat-value ${pendingFaces.length ? 'stat-warning' : 'stat-muted'}`}>{pendingFaces.length}</p></div>
-        <div className="admin-stat-card"><p className="admin-stat-label">No approved laptop</p><p className="admin-stat-value stat-neutral">{withoutLaptop.length}</p></div>
+        <div className="admin-stat-card"><p className="admin-stat-label">Laptops approved</p><p className="admin-stat-value stat-neutral">{devices.filter(d => d.status === 'approved').length}</p></div>
+        <div className="admin-stat-card"><p className="admin-stat-label">No laptop registered</p><p className="admin-stat-value stat-neutral">{withoutLaptop.length}</p></div>
         <div className="admin-stat-card"><p className="admin-stat-label">No face check</p><p className="admin-stat-value stat-neutral">{withoutFace.length}</p></div>
       </div>
 
@@ -139,7 +142,13 @@ function AdminDevices({ employees, headerActions, onPendingCountChange }) {
                   </td>
                   <td>{formatDayTime(d.created_at)}</td>
                   <td>{d.last_used_at ? formatAgo(d.last_used_at) : '–'}</td>
-                  <td><span className={`reminder-badge sec-badge-${STATUS_TONE[d.status]}`}>{STATUS_TEXT[d.status]}</span></td>
+                  <td>
+                    <span className={`reminder-badge sec-badge-${STATUS_TONE[d.status]}`}>{STATUS_TEXT[d.status]}</span>
+                    {d.status === 'pending' && (
+                      <span className="sec-cell-note">Registered outside the office network{d.registered_ip ? ` (${d.registered_ip})` : ''}. Their hours are held until you approve.</span>
+                    )}
+                    {d.status === 'approved' && d.approved_how === 'office_network' && <span className="sec-cell-note">Automatically, on the office network</span>}
+                  </td>
                   <td>
                     <div className="admin-table-actions">
                       {working === d.id ? <span className="admin-link-muted">Working…</span> : (
@@ -160,19 +169,14 @@ function AdminDevices({ employees, headerActions, onPendingCountChange }) {
       {/* ---------- faces ---------- */}
       <div className="sec-admin-section-head">
         <h2 className="reminders-subheading">Face check photos</h2>
-        {pendingFaces.length > 1 && (
-          <button className="admin-action-btn admin-action-in sec-admin-all" onClick={() => setFace(pendingFaces, 'approved')} disabled={!!working}>
-            <CheckCircleIcon width={15} height={15} /> {working === 'all-faces' ? 'Working…' : `Approve all ${pendingFaces.length}`}
-          </button>
-        )}
       </div>
-      <p className="admin-date sec-admin-note">Check the photo is clearly the employee, alone, facing the camera. Only approved faces are used at clock-in.</p>
+      <p className="admin-date sec-admin-note">Approved automatically once a photo passes the checks (one face, facing the camera, good light, not already someone else’s). If a photo isn’t right, reset it and they’ll be asked for a new one.</p>
       {loading ? null : faces.length === 0 ? (
         <div className="admin-empty"><p>No faces set up yet.</p></div>
       ) : (
         <div className="admin-table-card timeoff-admin-card">
           <div className="timeoff-admin-list">
-            {[...pendingFaces, ...faces.filter(f => f.status !== 'pending')].map(f => (
+            {faces.map(f => (
               <div className="timeoff-admin-row review-row" key={f.user_id}>
                 {f.photo_path ? <FacePhoto path={f.photo_path} /> : <div className="review-photo review-photo-empty">Deleted</div>}
                 <div className="timeoff-admin-main">
@@ -186,8 +190,7 @@ function AdminDevices({ employees, headerActions, onPendingCountChange }) {
                 <div className="timeoff-admin-actions">
                   {working === `face-${f.user_id}` ? <span className="admin-link-muted">Working…</span> : (
                     <>
-                      {f.status !== 'approved' && f.status !== 'withdrawn' && <button className="admin-link-btn" onClick={() => setFace([f], 'approved')}>Approve</button>}
-                      {f.status !== 'rejected' && f.status !== 'withdrawn' && <button className="admin-link-btn admin-link-danger" onClick={() => setFace([f], 'rejected')}>Reject</button>}
+                      {f.status === 'approved' && <button className="admin-link-btn admin-link-danger" onClick={() => setFace([f], 'rejected')}>Reset</button>}
                     </>
                   )}
                 </div>

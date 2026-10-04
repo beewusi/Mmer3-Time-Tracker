@@ -206,7 +206,11 @@ function Companion({ user, onLogout }) {
     setFaceOpen(false);
     try {
       const res = await answer(openCheck, result);
-      setMessage(res?.result === 'passed' ? 'Presence check done. Thanks.' : 'Sent. It didn’t match, so your admin will take a look.');
+      setMessage(res?.result === 'passed'
+        ? 'Presence check done. Thanks.'
+        : res?.result === 'missed'
+          ? 'No face was seen, so your time is paused. Open Mmerℇ and click Carry on when you’re back.'
+          : 'Sent. It didn’t match, so your admin will take a look.');
     } catch (err) {
       setMessage(err.message || 'The presence check couldn’t be sent.');
     }
@@ -236,7 +240,9 @@ function Companion({ user, onLogout }) {
         <div className={`companion-status companion-status-${working ? 'on' : live ? 'break' : 'off'}`}>
           <ClockIcon width={16} height={16} />
           {working && `Clocked in since ${dateToHHMM(new Date(status.clock_in_at))}`}
-          {!working && live && 'On a break'}
+          {!working && live && (status?.paused_for_check
+            ? 'Time paused: you missed a presence check. Open Mmerℇ and click Carry on.'
+            : 'On a break')}
           {!live && 'Not clocked in'}
         </div>
 

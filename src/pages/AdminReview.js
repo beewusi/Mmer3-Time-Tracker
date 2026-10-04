@@ -46,7 +46,9 @@ function AdminReview({ employees, headerActions, onOpenCountChange }) {
     const since = new Date(Date.now() - 45 * 86400000).toISOString();
     let query = supabase.from('session_flags').select('*').gte('created_at', since).order('created_at', { ascending: false });
     if (view === 'open') query = query.eq('status', 'open');
-    if (view === 'decided') query = query.neq('status', 'open');
+    if (view === 'decided') query = query.in('status', ['authorised', 'declined']);
+    // things only recorded on the session (off network, away, ...) don't come here
+    if (view === 'all') query = query.neq('status', 'noted');
     const { data } = await query;
     const list = data || [];
     setFlags(list);
@@ -193,7 +195,7 @@ function AdminReview({ employees, headerActions, onOpenCountChange }) {
       <div className="admin-header">
         <div>
           <h1>Review</h1>
-          <p className="admin-date">Sessions where a check didn’t add up. Authorise them, or decline so they don’t count.</p>
+          <p className="admin-date">Clock-ins and presence checks where the face didn’t match. Look at the photos, then authorise, or decline so the session doesn’t count.</p>
         </div>
         {headerActions}
       </div>

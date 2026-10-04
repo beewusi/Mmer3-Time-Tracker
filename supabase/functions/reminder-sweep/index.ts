@@ -7,8 +7,10 @@
 //   notifications (src/lib/push.js). Otherwise it's email only.
 // - Also does the 8h15m auto clock-out: saves the record and sets them
 //   clocked_out.
-// - Clock-in checks: missed presence checks, desktop app contact gaps, and
-//   deleting old screenshots/photos (14/30 days, as in the Privacy Notice).
+// - Clock-in checks: missed presence checks (time paused until they're back
+//   with a face check; clocked out at the missed check after an hour),
+//   desktop app contact gaps, and deleting old screenshots/photos (14/30
+//   days, as in the Privacy Notice).
 //
 // Needs REMINDER_SWEEP_SCHEMA.sql and PUSH_SUBSCRIPTIONS_SCHEMA.sql run first,
 // plus the EMAILJS_PRIVATE_KEY and VAPID_* secrets.
@@ -24,6 +26,10 @@ const ORG_UTC_OFFSET_MINUTES = 0; // Africa/Accra, UTC+0 all year
 
 // Grace period before a clock-in counts as missed.
 const MISSED_CLOCK_IN_GRACE_MINUTES = 15;
+
+// Paused after a missed presence check this long = clocked out at the time
+// of the missed check.
+const PAUSE_CLOCK_OUT_MINUTES = 60;
 
 // Days with no missed-clock-in check (getUTCDay(): 0 = Sun, 6 = Sat). Org-wide
 // for now, no per-employee schedules yet.
@@ -208,7 +214,7 @@ async function sweepBreakAndClockOutReminders(now: Date) {
       // reset employee_status. Location comes from employee_status (was
       // hardcoded to 'unavailable', which showed N/A).
       const clockInAt = status.clock_in_at ? new Date(status.clock_in_at) : now;
-      const totalSeconds = Math.max(0, Math.round((now.getTime() - clockInAt.getTime()) / 1000) - (status.break_accum_seconds || 0));
+      const totalSeconds = workedSecondsFor(status, now);
 
       await supabase.from('records').insert([{
         user_id: status.user_id,
@@ -225,6 +231,11 @@ async function sweepBreakAndClockOutReminders(now: Date) {
       updates.clock_in_at = null;
       updates.break_started_at = null;
       updates.break_accum_seconds = 0;
+      if ('paused_for_check' in status) {
+        updates.paused_for_check = false;
+        updates.held_for_laptop = false;
+        updates.held_device_id = null;
+      }
       // Only if the column exists, so the update can't fail and leave them
       // clocked in before location_status.sql is run.
       if ('location_status' in status) updates.location_status = null;
@@ -371,13 +382,60 @@ async function sweepPresenceChecks(now: Date) {
     }
 
     await supabase.from('presence_checks').update({ result: 'missed' }).eq('id', check.id);
-    await supabase.from('session_flags').insert({
-      user_id: check.user_id,
-      session_id: check.session_id,
-      type: 'presence_missed',
-      severity: 'medium',
-      details: { check_id: check.id, due_at: check.due_at }
-    });
+    // not at the desk: time stops from when the check was asked, until
+    // they're back with a face check. Nothing for the admin to do.
+    if (live && status.status === 'clocked_in') {
+      await supabase.from('employee_status').update({
+        status: 'on_break',
+        break_started_at: check.due_at,
+        paused_for_check: true,
+        updated_at: now.toISOString()
+      }).eq('user_id', check.user_id).eq('status', 'clocked_in');
+      await supabase.from('breaks').update({ reason: 'missed_check' })
+        .eq('user_id', check.user_id).is('ended_at', null);
+      await sendPush(check.user_id, 'Mmerℇ — Time paused',
+        'You missed a presence check, so your time is paused. Open Mmerℇ and do a face check to carry on.', 'paused');
+    }
+  }
+}
+
+// Paused for an hour after a missed check: clocked out at the time of the
+// missed check (the pause isn't a break they took, so it's dropped).
+async function sweepLongPauses(now: Date) {
+  const cutoff = new Date(now.getTime() - PAUSE_CLOCK_OUT_MINUTES * 60000).toISOString();
+  const { data: paused } = await supabase
+    .from('employee_status').select('*')
+    .eq('status', 'on_break').eq('paused_for_check', true).lt('break_started_at', cutoff);
+  for (const status of paused || []) {
+    const clockInAt = status.clock_in_at ? new Date(status.clock_in_at) : now;
+    const clockOutAt = new Date(status.break_started_at);
+    const worked = workedSecondsFor(status, now);   // stopped at the pause
+
+    await supabase.from('breaks').delete()
+      .eq('user_id', status.user_id).is('ended_at', null).eq('reason', 'missed_check');
+    await supabase.from('records').insert([{
+      user_id: status.user_id,
+      date: clockInAt.toLocaleDateString('en-GB'),
+      clock_in: clockInAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      clock_out: clockOutAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      hours_worked: secondsToHms(worked),
+      break_time: secondsToHms(status.break_accum_seconds || 0),
+      location_status: status.location_status || 'unavailable',
+      adjusted_by_admin: false
+    }]);
+    await supabase.from('employee_status').update({
+      status: 'clocked_out',
+      clock_in_at: null,
+      break_started_at: null,
+      break_accum_seconds: 0,
+      location_status: null,
+      paused_for_check: false,
+      held_for_laptop: false,
+      held_device_id: null,
+      updated_at: now.toISOString()
+    }).eq('user_id', status.user_id).eq('status', 'on_break');
+    await sendPush(status.user_id, 'Mmerℇ — Clocked out',
+      `You didn’t come back after a missed presence check, so you were clocked out at ${clockOutAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}.`, 'paused-out');
   }
 }
 
@@ -500,6 +558,7 @@ Deno.serve(async (_req) => {
   await sweepMissedClockIn(now);
   await safely('sessions without checks', () => sweepSessionsWithoutChecks(now));
   await safely('presence checks', () => sweepPresenceChecks(now));
+  await safely('long pauses', () => sweepLongPauses(now));
   await safely('contact gaps', () => sweepContactGaps(now));
   await safely('retention', () => sweepRetention(now));
   return new Response(JSON.stringify({ ok: true, ranAt: now.toISOString() }), {
