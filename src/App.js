@@ -111,7 +111,9 @@ function App() {
 
   async function handleLogout(notice = '') {
     recoveryRef.current = false;
-    await supabase.auth.signOut();
+    // this browser/app only: signing out of the website mustn't sign the
+    // desktop app out too (the default signs out everywhere)
+    await supabase.auth.signOut({ scope: 'local' });
     setUser(null);
     setLoginNotice(typeof notice === 'string' ? notice : '');
     setPage('login');
