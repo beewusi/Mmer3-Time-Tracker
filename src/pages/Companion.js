@@ -194,8 +194,11 @@ function Companion({ user, onLogout }) {
     // one per slot at a random point in it, so the time can't be guessed
     const slotMs = (60 / perHour) * 60 * 1000;
     let cancelled = false;
+    let first = true;
     const schedule = () => {
-      const wait = slotMs * (0.35 + Math.random() * 0.9);
+      // first one 2-6 min after clocking in, then one per slot
+      const wait = first ? (2 + Math.random() * 4) * 60000 : slotMs * (0.35 + Math.random() * 0.9);
+      first = false;
       shotTimerRef.current = setTimeout(async () => {
         if (cancelled) return;
         await takeScreenshot();

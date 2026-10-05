@@ -438,6 +438,17 @@ function Dashboard({ user, onLogout }) {
     if (!user) return;
 
     const interval = setInterval(async () => {
+      // sign-in still valid? (after the laptop sleeps it can expire, and then
+      // the profile looks missing even though the account is fine)
+      const { data: auth, error: authError } = await supabase.auth.getUser();
+      if (authError || !auth?.user) {
+        // no connection: try again next time; anything else: signed out
+        if (authError && !authError.status) return;
+        clearInterval(interval);
+        onLogout('You’ve been signed out. Please sign in again.');
+        return;
+      }
+
       const { data, error } = await supabase
         .from('profiles')
         .select('id')
@@ -446,9 +457,7 @@ function Dashboard({ user, onLogout }) {
 
       if (!error && !data) {
         clearInterval(interval);
-        await supabase.auth.signOut();
-        alert('Your account access has been removed by an admin.');
-        onLogout();
+        onLogout('Your account has been removed. Please contact your admin.');
         return;
       }
 

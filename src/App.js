@@ -140,7 +140,7 @@ function App() {
       .channel(`account-${user.id}`)
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'profiles' }, payload => {
         if (payload.old?.id === user.id) {
-          handleLogout('Your account access has been removed by an admin.');
+          handleLogout('Your account has been removed. Please contact your admin.');
         }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` }, payload => {
