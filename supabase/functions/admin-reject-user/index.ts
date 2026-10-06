@@ -4,6 +4,7 @@
 // profile leaves an auth user behind and that email can't sign up again.
 // Records, time off and timesheet approvals are kept (needs
 // supabase/keep_employee_history.sql), with the name saved on them first.
+// Face data (numbers and set-up photos), laptops and app contact are removed.
 //
 // Admin only (checked by email, same as ADMIN_EMAIL in src/supabase.js). Uses
 // the service role key, which Supabase injects on deploy and never reaches the
@@ -68,6 +69,17 @@ Deno.serve(async (req: Request) => {
       await adminClient.from('records').update({ employee_name: employeeName }).eq('user_id', userId);
       await adminClient.from('time_off_requests').update({ employee_name: employeeName }).eq('user_id', userId);
     }
+
+    // Face data goes with the account: the numbers and the set-up photos.
+    // Clock-in photos stay with their history (screenshots go after 14 days).
+    const { data: files } = await adminClient.storage.from('evidence').list(userId, { limit: 100 });
+    const facePhotos = (files || []).filter(f => f.name.startsWith('face-')).map(f => `${userId}/${f.name}`);
+    if (facePhotos.length) await adminClient.storage.from('evidence').remove(facePhotos);
+    await adminClient.from('face_profiles').delete().eq('user_id', userId);
+    // laptops and app contact go too, so the laptop can be given to someone else
+    await adminClient.from('devices').delete().eq('user_id', userId);
+    await adminClient.from('heartbeats').delete().eq('user_id', userId);
+    await adminClient.from('webauthn_challenges').delete().eq('user_id', userId);
 
     // Live state only. History stays.
     await adminClient.from('employee_status').delete().eq('user_id', userId);

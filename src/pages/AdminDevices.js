@@ -89,6 +89,19 @@ function AdminDevices({ employees, headerActions, onPendingCountChange }) {
     return { error: null };
   });
 
+  // face left behind by a deleted account: the numbers and the photos go
+  const deleteFace = f => run(`face-${f.user_id}`, async () => {
+    const { data: files } = await supabase.storage.from('evidence').list(f.user_id, { limit: 100 });
+    const paths = (files || []).filter(x => x.name.startsWith('face-')).map(x => `${f.user_id}/${x.name}`);
+    if (f.photo_path && !paths.includes(f.photo_path)) paths.push(f.photo_path);
+    if (paths.length) {
+      const { error } = await supabase.storage.from('evidence').remove(paths);
+      if (error) return { error };
+    }
+    return supabase.from('face_profiles').delete().eq('user_id', f.user_id);
+  });
+  const isDeleted = userId => !employees.some(e => e.id === userId);
+
   // how many laptops each person has (more than one is worth a look)
   const perUser = devices.reduce((m, d) => ({ ...m, [d.user_id]: (m[d.user_id] || 0) + 1 }), {});
   const withoutLaptop = employees.filter(e => !devices.some(d => d.user_id === e.id && (d.status === 'approved' || d.status === 'pending')));
@@ -170,7 +183,7 @@ function AdminDevices({ employees, headerActions, onPendingCountChange }) {
       <div className="sec-admin-section-head">
         <h2 className="reminders-subheading">Face check photos</h2>
       </div>
-      <p className="admin-date sec-admin-note">Approved automatically once a photo passes the checks (one face, facing the camera, good light, not already someone else’s). If a photo isn’t right, reset it and they’ll be asked for a new one.</p>
+      <p className="admin-date sec-admin-note">Approved automatically once a photo passes the checks (one face, facing the camera, good light, not already someone else’s). If a photo isn’t right, reset it and they’ll be asked for a new one. Faces of deleted accounts are removed with the account; any left from before can be deleted here.</p>
       {loading ? null : faces.length === 0 ? (
         <div className="admin-empty"><p>No faces set up yet.</p></div>
       ) : (
@@ -190,7 +203,9 @@ function AdminDevices({ employees, headerActions, onPendingCountChange }) {
                 <div className="timeoff-admin-actions">
                   {working === `face-${f.user_id}` ? <span className="admin-link-muted">Working…</span> : (
                     <>
-                      {f.status === 'approved' && <button className="admin-link-btn admin-link-danger" onClick={() => setFace([f], 'rejected')}>Reset</button>}
+                      {isDeleted(f.user_id)
+                        ? <button className="admin-link-btn admin-link-danger" onClick={() => deleteFace(f)}>Delete</button>
+                        : f.status === 'approved' && <button className="admin-link-btn admin-link-danger" onClick={() => setFace([f], 'rejected')}>Reset</button>}
                     </>
                   )}
                 </div>
