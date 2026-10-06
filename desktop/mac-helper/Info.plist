@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>com.mmer3.wifi</string>
+  <key>CFBundleName</key><string>Mmer3 Wi-Fi</string>
+  <key>CFBundleDisplayName</key><string>Mmerℇ Wi-Fi check</string>
+  <key>CFBundleExecutable</key><string>mmer3-wifi</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>LSMinimumSystemVersion</key><string>11.0</string>
+  <key>LSUIElement</key><true/>
+  <key>NSLocationUsageDescription</key><string>Mmerℇ reads which Wi-Fi router you're on to tell whether you're in the office. Your location isn't saved.</string>
+  <key>NSLocationWhenInUseUsageDescription</key><string>Mmerℇ reads which Wi-Fi router you're on to tell whether you're in the office. Your location isn't saved.</string>
+</dict>
+</plist>

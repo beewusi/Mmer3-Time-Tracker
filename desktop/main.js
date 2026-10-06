@@ -14,7 +14,7 @@ const {
 const path = require('path');
 const fs = require('fs');
 const { execFile } = require('child_process');
-const { normaliseRouter, parseWindows, parseMac, parseMacScript, MAC_ASK_LOCATION, MAC_READ_WIFI } = require('./wifi');
+const { normaliseRouter, parseWindows, parseMac, parseMacHelper } = require('./wifi');
 
 // config.json sits next to the app's files after install (resources folder),
 // so the site address can be changed without rebuilding
@@ -199,28 +199,56 @@ function run(cmd, args) {
   return runLong(cmd, args, 4000);
 }
 
-function runLong(cmd, args, timeout) {
+function runLong(cmd, args, timeout, extra = {}) {
   return new Promise(resolve => {
-    execFile(cmd, args, { timeout, windowsHide: true }, (err, stdout) => resolve(err ? '' : String(stdout)));
+    execFile(cmd, args, { timeout, windowsHide: true, ...extra }, (err, stdout) => resolve(err ? '' : String(stdout)));
   });
+}
+
+// Mac: the Mmer3 Wi-Fi check (mac-helper/), a tiny app with its own Location
+// permission. Opened through the system so the Mac treats it as an app and
+// asks "… would like to use your location" the first time. It writes its
+// answer to a file. Asked again when the Wi-Fi name changes, else every 10
+// minutes; one at a time.
+const MAC_HELPER = app.isPackaged
+  ? path.join(process.resourcesPath, 'Mmer3Wifi.app')
+  : path.join(__dirname, 'mac-helper', 'Mmer3Wifi.app');
+let macWifi = { at: 0, name: null, router: null, status: 0 };
+let macAsking = null;
+
+function askMacHelper() {
+  if (macAsking) return macAsking;
+  if (!fs.existsSync(MAC_HELPER)) return Promise.resolve(macWifi);
+  const out = path.join(app.getPath('userData'), 'wifi.txt');
+  try { fs.unlinkSync(out); } catch { /* not there yet */ }
+  // first time it waits for the Location answer (up to a minute)
+  macAsking = runLong('open', ['-g', '-W', '-n', MAC_HELPER, '--args', out], 75000).then(() => {
+    let found = null;
+    try { found = parseMacHelper(fs.readFileSync(out, 'utf8')); } catch { /* no answer */ }
+    if (found) macWifi = { ...found, at: Date.now() };
+    macAsking = null;
+    return macWifi;
+  });
+  return macAsking;
 }
 
 // The Wi-Fi network: its name, and the router's own ID (BSSID), which
 // doesn't change when the internet address does. That's what tells the
 // office apart. null where the system won't say (not on Wi-Fi; on a Mac,
-// Location access for Mmerℇ is needed for both).
+// Location allowed for the Mmer3 Wi-Fi check is needed for the router).
 async function readWifi() {
   if (process.platform === 'win32') {
-    return parseWindows(await run('netsh', ['wlan', 'show', 'interfaces']));
+    // UTF-8 first, or names with emoji or accents come out garbled
+    return parseWindows(await runLong('cmd', ['/d', '/s', '/c', '"chcp 65001 >nul & netsh wlan show interfaces"'], 4000, { windowsVerbatimArguments: true }));
   }
   if (process.platform === 'darwin') {
     const summary = await run('ipconfig', ['getsummary', 'en0']);
     const needName = !/\bSSID : (?!<redacted>)./.test(summary);
     const found = parseMac(summary, needName ? await run('networksetup', ['-getairportnetwork', 'en0']) : '');
     if (found.router) return found;
-    // hidden there: ask the Wi-Fi directly (works once Location is allowed)
-    const direct = parseMacScript(await run('osascript', ['-l', 'JavaScript', '-e', MAC_READ_WIFI]));
-    return { name: found.name || direct.name, router: direct.router };
+    const fresh = Date.now() - macWifi.at < 10 * 60 * 1000 && (!found.name || found.name === macWifi.name);
+    const helper = fresh ? macWifi : await askMacHelper();
+    return { name: found.name || helper.name, router: helper.router };
   }
   return {
     name: (await run('iwgetid', ['-r'])).trim().slice(0, 64) || null,
@@ -301,9 +329,9 @@ app.whenReady().then(async () => {
   if (process.platform === 'darwin') {
     // asks once; the Mac remembers the answer
     try { await systemPreferences.askForMediaAccess('camera'); } catch { /* older macOS */ }
-    // Location, so the Mac shows the Wi-Fi router's ID (not waited for)
-    runLong('osascript', ['-l', 'JavaScript', '-e', MAC_ASK_LOCATION], 20000)
-      .then(out => console.log('Location status', out.trim()));
+    // Location for the Wi-Fi check, so the Mac shows the router's ID (asked
+    // at start so the question comes up straight away; not waited for)
+    askMacHelper().then(w => console.log('Wi-Fi check: Location status', w.status, 'router', w.router));
   }
 
   // start with the laptop, hidden in the tray

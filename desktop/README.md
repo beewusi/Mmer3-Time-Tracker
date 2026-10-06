@@ -2,8 +2,8 @@
 
 Small tray app for work laptops. It shows the web app's `/companion` page.
 Whenever it's running it sends a heartbeat every minute with the Wi-Fi name and
-the router's ID (how the office is recognised; see admin Settings → Office
-Wi-Fi routers). While the employee is clocked in it also:
+the router's ID (how the office is recognised once the admin has added the
+office network in Settings → Office networks). While the employee is clocked in it also:
 
 - shows gaps in contact on the admin Activity page
 - notices when the computer is idle or locked
@@ -27,8 +27,8 @@ it's in the app's resources folder, so it can be changed without rebuilding:
 cd desktop
 npm install
 npm start                 # try it (uses config.json)
-npm run dist:win          # on Windows → dist/Mmer3 Setup 1.0.0.exe
-npm run dist:mac          # on a Mac   → dist/Mmer3-1.0.0.dmg
+npm run dist:win          # on Windows → dist/Mmer3 Setup 1.0.1.exe
+npm run dist:mac          # on a Mac   → dist/Mmer3-1.0.1.dmg (also builds the Wi-Fi check)
 ```
 
 Not code-signed (our own laptops):
@@ -36,6 +36,8 @@ Not code-signed (our own laptops):
 - Windows: SmartScreen says "Windows protected your PC" → More info → Run anyway.
 - Mac: right-click the app → Open → Open (first time only). Then allow
   Camera and Screen Recording in System Settings → Privacy & Security when asked.
-  For the office Wi-Fi check, Mmer3 also needs Location Services on (System
-  Settings → Privacy & Security → Location Services), otherwise the Mac hides
-  the Wi-Fi details.
+  The Mac only shows the Wi-Fi router's ID to apps allowed Location, so the
+  app comes with a tiny "Mmerℇ Wi-Fi check" (`mac-helper/`, built by
+  `dist:mac`; needs the developer command line tools: `xcode-select --install`).
+  The first time, the Mac asks whether it can use your location: Allow. It
+  then shows in System Settings → Privacy & Security → Location Services.
