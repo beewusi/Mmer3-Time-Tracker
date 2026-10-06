@@ -263,6 +263,7 @@ function Dashboard({ user, onLogout }) {
   const [pushSupported, setPushSupported] = useState(true);
   const [pushPermission, setPushPermission] = useState('default');
   const [pushEnabled, setPushEnabled] = useState(false);
+  const locationErrorRef = useRef('');
   const [pushLoading, setPushLoading] = useState(false);
   const [pushError, setPushError] = useState('');
 
@@ -617,9 +618,26 @@ function Dashboard({ user, onLogout }) {
     return R * c;
   }
 
+  // what to tell someone whose location couldn't be read
+  function locationHelp() {
+    const reason = locationErrorRef.current;
+    const mac = /Mac/i.test(navigator.platform || navigator.userAgent);
+    if (reason === 'denied') {
+      return 'You need Location on to clock in. Allow it for this site: click the icon to the left of the web address, set Location to Allow, then press Clock In again.';
+    }
+    if (reason === 'timeout') {
+      return 'Your location took too long to find. Check Location is on and press Clock In again.';
+    }
+    return mac
+      ? 'You need Location on to clock in. On the Mac: System Settings → Privacy & Security → Location Services → turn it on, and switch on your browser in the list. Then press Clock In again.'
+      : 'You need Location on to clock in. On Windows: Settings → Privacy & security → Location → turn on Location services and “Let desktop apps access your location”. Then press Clock In again.';
+  }
+
   function checkLocation() {
+    locationErrorRef.current = '';
     return new Promise((resolve) => {
       if (!navigator.geolocation) {
+        locationErrorRef.current = 'off';
         applyLocationStatus('unavailable');
         resolve('unavailable');
         return;
@@ -633,8 +651,9 @@ function Dashboard({ user, onLogout }) {
           applyLocationStatus(result);
           resolve(result);
         },
-        () => {
+        (err) => {
           applyLocationStatus('unavailable');
+          locationErrorRef.current = err?.code === 1 ? 'denied' : err?.code === 3 ? 'timeout' : 'off';
           resolve('unavailable');
         },
         // Timeout so Clock In doesn't hang if the location prompt is ignored.
@@ -879,13 +898,18 @@ function Dashboard({ user, onLogout }) {
     requestNotificationPermission();
 
     try {
+      // location first: no point doing the face check if it's off
+      setClockInStep('Checking location…');
+      const location = await checkLocation();
+      if (location === 'unavailable') {
+        setReminder(locationHelp());
+        return;
+      }
+
       // face, then the laptop. Cancelling the face check cancels the clock-in.
       setClockInStep('Getting ready…');
       const checks = await runChecks('clockin');
       if (!checks) return;
-
-      setClockInStep('Checking location…');
-      const location = await checkLocation();
 
       // clock-check decides and starts the session
       setClockInStep('Clocking in…');

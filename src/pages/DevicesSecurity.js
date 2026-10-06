@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 import FaceCheck from '../components/FaceCheck';
 import {
-  passkeysSupported, listMyDevices, registerThisLaptop, removeDevice, getDeviceKey,
+  passkeysSupported, listMyDevices, registerThisLaptop, getDeviceKey,
   getMyFaceProfile, saveFaceProfile, withdrawFaceConsent, loadSecuritySettings
 } from '../lib/security';
 import { formatAgo, formatDayTime } from '../lib/time';
@@ -40,7 +40,6 @@ function DevicesSecurity({ user, onChanged }) {
   const [registering, setRegistering] = useState(false);
   const [deviceError, setDeviceError] = useState('');
   const [deviceNote, setDeviceNote] = useState('');
-  const [removingId, setRemovingId] = useState(null);
 
   const [face, setFace] = useState(null);
   const [faceLoaded, setFaceLoaded] = useState(false);
@@ -91,18 +90,6 @@ function DevicesSecurity({ user, onChanged }) {
     setRegistering(false);
   }
 
-  async function handleRemove(id) {
-    setRemovingId(id);
-    try {
-      await removeDevice(id);
-      setDevices(await listMyDevices(user.id));
-      onChanged && onChanged();
-    } catch (err) {
-      setDeviceError(err.message || 'Couldn’t remove the laptop.');
-    }
-    setRemovingId(null);
-  }
-
   async function handleFaceDone(result) {
     setShowFaceCheck(false);
     setFaceSaving(true);
@@ -136,6 +123,8 @@ function DevicesSecurity({ user, onChanged }) {
   // once approved the photo is locked; the admin rejects it to allow a retake
   const faceLocked = face && face.status === 'approved';
   const thisLaptopRegistered = devices.some(d => d.device_key && d.device_key === thisDeviceKey);
+  // one laptop each: another one can't be added until the admin removes it
+  const myLaptop = devices.find(d => d.status === 'approved' || d.status === 'pending');
   const faceInfo = face ? FACE_STATUS[face.status] || FACE_STATUS.pending : null;
   const faceOff = settings && settings.face_check_enabled === false;
   const desktopSeen = heartbeat?.desktop_seen_at ? new Date(heartbeat.desktop_seen_at) : null;
@@ -153,7 +142,7 @@ function DevicesSecurity({ user, onChanged }) {
       {/* ---------- laptop ---------- */}
       <h2 className="reminders-subheading sec-first-heading">Work laptop</h2>
       <p className="page-date reminders-subnote">
-        Register the laptop you were given. At clock-in it asks for Windows Hello or Touch ID, so only this laptop can clock you in. Registered on the office network, it’s approved straight away.
+        Register the one laptop you were given. At clock-in it asks for Windows Hello or Touch ID, so only that laptop can clock you in. Registered on the office network, it’s approved straight away. To change laptop, ask your admin to remove the old one.
       </p>
       <div className="reminders-list">
         {devices.map(d => {
@@ -177,19 +166,23 @@ function DevicesSecurity({ user, onChanged }) {
                 )}
               </div>
               <span className={`reminder-badge sec-badge-${info.tone}`}>{info.label}</span>
-              {d.status === 'pending' && (
-                <button
-                  className="sec-btn-link"
-                  onClick={() => handleRemove(d.id)}
-                  disabled={removingId === d.id}>
-                  {removingId === d.id ? 'Removing…' : 'Remove'}
-                </button>
-              )}
             </div>
           );
         })}
 
-        {!thisLaptopRegistered && (
+        {!thisLaptopRegistered && myLaptop && (
+          <div className="reminder-item sec-item-warn">
+            <div className="reminder-icon"><LaptopIcon width={18} height={18} /></div>
+            <div className="reminder-info">
+              <h3>This isn’t your registered laptop</h3>
+              <p>
+                You can only clock in from {myLaptop.label || 'your registered laptop'}. Got a new laptop, or changed browser? Ask your admin to remove the old one, then register this one here.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {!thisLaptopRegistered && !myLaptop && (
           <div className="reminder-item sec-action-item">
             <div className="reminder-icon"><LaptopIcon width={18} height={18} /></div>
             <div className="reminder-info">

@@ -136,10 +136,8 @@ alter table public.devices enable row level security;
 drop policy if exists "devices_select_own" on public.devices;
 create policy "devices_select_own" on public.devices
   for select to authenticated using (auth.uid() = user_id);
--- only ones still waiting; an approved laptop is removed by the admin
+-- laptops are removed by the admin only (one laptop each; 6 Oct)
 drop policy if exists "devices_delete_own" on public.devices;
-create policy "devices_delete_own" on public.devices
-  for delete to authenticated using (auth.uid() = user_id and status = 'pending');
 drop policy if exists "devices_admin_all" on public.devices;
 create policy "devices_admin_all" on public.devices
   for all to authenticated

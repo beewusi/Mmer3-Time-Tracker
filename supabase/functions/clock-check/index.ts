@@ -207,8 +207,13 @@ Deno.serve(async (req: Request) => {
     // ---------- register a laptop ----------
     if (action === 'register-options') {
       const { data: existing } = await db
-        .from('devices').select('credential_id, transports')
+        .from('devices').select('credential_id, transports, label, status')
         .eq('user_id', user.id).neq('status', 'revoked');
+      // one laptop each: a new one only after the admin removes the old one
+      const current = (existing ?? []).find(d => ['approved', 'pending'].includes(d.status));
+      if (current) {
+        return blocked('LAPTOP_ALREADY', `You already have a laptop registered (${current.label}). Ask your admin to remove it first, then register this one.`);
+      }
 
       const options = await generateRegistrationOptions({
         rpName: RP_NAME,
@@ -246,6 +251,13 @@ Deno.serve(async (req: Request) => {
       const { credential, credentialBackedUp } = result.registrationInfo;
       const label = String(body.label ?? '').trim().slice(0, 60) || 'Work laptop';
       const deviceKey = typeof body.deviceKey === 'string' ? body.deviceKey.slice(0, 64) : null;
+
+      // one laptop each (checked again in case two tabs registered at once)
+      const { data: already } = await db
+        .from('devices').select('label').eq('user_id', user.id).in('status', ['approved', 'pending']).limit(1);
+      if (already?.length) {
+        return blocked('LAPTOP_ALREADY', `You already have a laptop registered (${already[0].label}). Ask your admin to remove it first, then register this one.`);
+      }
 
       // already someone else's laptop (same browser)
       if (deviceKey) {
@@ -301,9 +313,9 @@ Deno.serve(async (req: Request) => {
 
     // ---------- clock in ----------
     // Checked here first, then the session is started here (the browser can't
-    // start one itself). Blocked: no face set up, no face seen, not their
-    // laptop, no laptop registered, off the office network when Settings says
-    // office only. Face not matching after 3 tries: clocked in, goes to Review.
+    // start one itself). Blocked: location off, no face set up, no face seen,
+    // not their laptop, no laptop registered, off the office network when
+    // Settings says office only. Face not matching after 3 tries: clocked in, goes to Review.
     // clockInAt = a clock-in made while offline, sent now it's back.
     if (action === 'clock-in') {
       const { data: current } = await db
@@ -330,6 +342,11 @@ Deno.serve(async (req: Request) => {
           sent_at: new Date().toISOString(),
           minutes_late: Math.round((Date.now() - claimed.getTime()) / 60000)
         });
+      }
+
+      // location: has to be readable (on the laptop and allowed for the site)
+      if (!body.clockInAt && !['authorised', 'unauthorised'].includes(body.locationStatus)) {
+        return blocked('LOCATION_OFF', 'Turn on Location to clock in, then try again.');
       }
 
       // face: required
@@ -376,6 +393,11 @@ Deno.serve(async (req: Request) => {
         const device = mine.find(d => d.credential_id === body.assertion.id);
         const challenge = await takeChallenge(db, user.id, 'verify');
         if (!device) return blocked('NOT_YOUR_LAPTOP', 'This isn’t your registered laptop. Clock in from your own work laptop.');
+        // passkeys can be copied to other computers by Google / Apple; only
+        // the browser it was registered in counts
+        if (device.device_key && deviceKey !== device.device_key) {
+          return blocked('NOT_YOUR_LAPTOP', `This isn’t the laptop you registered (${device.label}). Clock in from that laptop. Changed browser or cleared its data? Ask your admin to remove your laptop so you can register it again.`);
+        }
         if (!challenge) return blocked('LAPTOP_CHECK', 'The laptop check took too long. Please try again.');
         try {
           const result = await verifyAuthenticationResponse({
