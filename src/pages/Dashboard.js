@@ -148,7 +148,7 @@ const EMPLOYEE_FAQ_TEXT = EMPLOYEE_FAQ_ITEMS.map(item => `- ${item.q} ${item.a}`
 
 function locationLabel(status) {
   if (status === 'authorised') return 'Authorised';
-  if (status === 'unauthorised') return 'Unauthorised';
+  if (status === 'unauthorised') return 'Unauthorised location';
   if (status === 'declined') return 'Declined';
   return 'N/A';
 }
@@ -2194,8 +2194,6 @@ function Dashboard({ user, onLogout }) {
                               <span className="location-tag location-tag-held" title="Counts once your admin approves your laptop">Held</span>
                             )}
                           </div>
-                          {record.location_status === 'unauthorised' && <p className="location-note location-note-warn">Unauthorised location.</p>}
-                          {record.location_status === 'declined' && <p className="location-note">Location declined: hours not counted.</p>}
                           <SessionTimeline session={recordToSession(record)} />
                         </div>
                       ))}
@@ -2210,8 +2208,6 @@ function Dashboard({ user, onLogout }) {
                               {locationLabel(locationStatus)}
                             </span>
                           </div>
-                          {locationStatus === 'unauthorised' && <p className="location-note location-note-warn">Unauthorised location.</p>}
-                          {locationStatus === 'declined' && <p className="location-note">Location declined: hours not counted.</p>}
                           <SessionTimeline session={liveSession()} />
                         </div>
                       )}

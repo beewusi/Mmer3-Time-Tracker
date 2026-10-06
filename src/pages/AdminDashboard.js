@@ -28,7 +28,7 @@ const DEFAULT_DEPARTMENT_SUGGESTIONS = ['Operations', 'Finance', 'Human Resource
 
 function locationLabel(status) {
   if (status === 'authorised') return 'Authorised';
-  if (status === 'unauthorised') return 'Unauthorised';
+  if (status === 'unauthorised') return 'Unauthorised location';
   if (status === 'declined') return 'Declined';
   return 'N/A';
 }
@@ -2074,8 +2074,6 @@ function AdminDashboard({ user, onLogout }) {
                                     )}
                                   </span>
                                 </div>
-                                {needsReview && <p className="location-note location-note-warn">Unauthorised location.</p>}
-                                {isDeclined && <p className="location-note">Location declined: hours not counted.</p>}
                                 <SessionTimeline
                                   session={recordToSession(record)}
                                   editable={!monthLocked}
@@ -2115,8 +2113,6 @@ function AdminDashboard({ user, onLogout }) {
                                   )}
                                 </span>
                               </div>
-                              {live.location_status === 'unauthorised' && <p className="location-note location-note-warn">Unauthorised location.</p>}
-                              {live.location_status === 'declined' && <p className="location-note">Location declined: hours not counted.</p>}
                               <SessionTimeline
                                 session={liveToSession(live, timesheetEmployeeId)}
                                 editable
