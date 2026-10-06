@@ -2074,6 +2074,8 @@ function AdminDashboard({ user, onLogout }) {
                                     )}
                                   </span>
                                 </div>
+                                {needsReview && <p className="location-note location-note-warn">Unauthorised location.</p>}
+                                {isDeclined && <p className="location-note">Location declined: hours not counted.</p>}
                                 <SessionTimeline
                                   session={recordToSession(record)}
                                   editable={!monthLocked}
@@ -2113,6 +2115,8 @@ function AdminDashboard({ user, onLogout }) {
                                   )}
                                 </span>
                               </div>
+                              {live.location_status === 'unauthorised' && <p className="location-note location-note-warn">Unauthorised location.</p>}
+                              {live.location_status === 'declined' && <p className="location-note">Location declined: hours not counted.</p>}
                               <SessionTimeline
                                 session={liveToSession(live, timesheetEmployeeId)}
                                 editable

@@ -700,6 +700,9 @@
 
 .location-tag-authorised { background: var(--success-bg); color: var(--success); }
 .location-tag-unauthorised { background: var(--danger-bg); color: var(--danger); }
+/* plain sentence under a session about its location */
+.location-note { margin: 6px 0 2px; font-size: 13px; color: var(--gray-500); }
+.location-note-warn { color: var(--danger); }
 .location-tag-unavailable { background: var(--gray-100); color: var(--gray-500); }
 .location-tag-declined { background: var(--gray-100); color: var(--danger); text-decoration: line-through; }
 .location-tag-held { background: var(--warning-bg); color: var(--warning); }

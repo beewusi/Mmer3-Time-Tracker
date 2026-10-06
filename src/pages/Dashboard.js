@@ -618,6 +618,12 @@ function Dashboard({ user, onLogout }) {
     return R * c;
   }
 
+  // red dot on a timesheet day: a session from outside the office area
+  function dayFlagged(day, dayRecs) {
+    if (dayRecs.some(r => r.location_status === 'unauthorised')) return true;
+    return isClockedIn && locationStatus === 'unauthorised' && isSameCalendarDay(day, new Date());
+  }
+
   // what to tell someone whose location couldn't be read
   function locationHelp() {
     const reason = locationErrorRef.current;
@@ -2096,6 +2102,7 @@ function Dashboard({ user, onLogout }) {
                         className={`timesheet-day-cell ${hasTime ? 'has-records' : ''} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
                         onClick={() => selectTimesheetDay(day)}>
                         <span className="timesheet-day-number">{day.getDate()}</span>
+                        {dayFlagged(day, dayRecs) && <span className="timesheet-day-flag" title="Unauthorised location" />}
                         {hasTime && (
                           <span className="timesheet-day-hours">{formatTime(totalSecs).slice(0, 5)}</span>
                         )}
@@ -2131,6 +2138,7 @@ function Dashboard({ user, onLogout }) {
                         onClick={() => selectTimesheetDay(day)}>
                         <span className="timesheet-week-dayname">{day.toLocaleDateString('en-GB', { weekday: 'short' })}</span>
                         <span className="timesheet-week-daynum">{day.getDate()}</span>
+                        {dayFlagged(day, dayRecs) && <span className="timesheet-day-flag" title="Unauthorised location" />}
                         {hasTime && (
                           <span className="timesheet-day-hours">{formatTime(totalSecs).slice(0, 5)}</span>
                         )}
@@ -2186,6 +2194,8 @@ function Dashboard({ user, onLogout }) {
                               <span className="location-tag location-tag-held" title="Counts once your admin approves your laptop">Held</span>
                             )}
                           </div>
+                          {record.location_status === 'unauthorised' && <p className="location-note location-note-warn">Unauthorised location.</p>}
+                          {record.location_status === 'declined' && <p className="location-note">Location declined: hours not counted.</p>}
                           <SessionTimeline session={recordToSession(record)} />
                         </div>
                       ))}
@@ -2200,6 +2210,8 @@ function Dashboard({ user, onLogout }) {
                               {locationLabel(locationStatus)}
                             </span>
                           </div>
+                          {locationStatus === 'unauthorised' && <p className="location-note location-note-warn">Unauthorised location.</p>}
+                          {locationStatus === 'declined' && <p className="location-note">Location declined: hours not counted.</p>}
                           <SessionTimeline session={liveSession()} />
                         </div>
                       )}
