@@ -9,7 +9,7 @@
   "scripts": {
     "start": "electron .",
     "dist:win": "electron-builder --win nsis",
-    "dist:mac": "sh mac-helper/build.sh && electron-builder --mac dmg"
+    "dist:mac": "sh mac-helper/build.sh && electron-builder --mac dmg --universal"
   },
   "devDependencies": {
     "electron": "^44.5.1",
@@ -57,7 +57,8 @@
           "from": "mac-helper/Mmer3Wifi.app",
           "to": "Mmer3Wifi.app"
         }
-      ]
+      ],
+      "x64ArchFiles": "Contents/Resources/Mmer3Wifi.app/**"
     },
     "extraResources": [
       {

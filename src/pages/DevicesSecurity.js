@@ -5,6 +5,7 @@ import {
   passkeysSupported, listMyDevices, registerThisLaptop, getDeviceKey,
   getMyFaceProfile, saveFaceProfile, withdrawFaceConsent, loadSecuritySettings
 } from '../lib/security';
+import { DESKTOP_DOWNLOADS, DESKTOP_VERSION, thisComputer } from '../lib/downloads';
 import { formatAgo, formatDayTime } from '../lib/time';
 import { LaptopIcon, FaceIcon, MonitorIcon, AlertIcon } from '../icons';
 import './Security.css';
@@ -125,6 +126,8 @@ function DevicesSecurity({ user, onChanged }) {
   const thisLaptopRegistered = devices.some(d => d.device_key && d.device_key === thisDeviceKey);
   // one laptop each: another one can't be added until the admin removes it
   const myLaptop = devices.find(d => d.status === 'approved' || d.status === 'pending');
+  const computer = thisComputer();
+  const downloadOrder = computer === 'mac' ? ['mac', 'windows'] : ['windows', 'mac'];
   const faceInfo = face ? FACE_STATUS[face.status] || FACE_STATUS.pending : null;
   const faceOff = settings && settings.face_check_enabled === false;
   const desktopSeen = heartbeat?.desktop_seen_at ? new Date(heartbeat.desktop_seen_at) : null;
@@ -293,7 +296,22 @@ function DevicesSecurity({ user, onChanged }) {
             <p>
               {desktopSeen
                 ? `Last in touch ${formatAgo(desktopSeen)}`
-                : 'Not set up on this account yet. Your admin will install it on your laptop.'}
+                : 'Not set up on this laptop yet. Download it below, install it, and sign in once with this account.'}
+            </p>
+            <div className="sec-inline-form sec-downloads">
+              {downloadOrder.map(key => (
+                <a
+                  key={key}
+                  className={key === computer ? 'btn-primary' : 'sec-btn-secondary'}
+                  href={DESKTOP_DOWNLOADS[key].url}
+                  target="_blank"
+                  rel="noopener noreferrer">
+                  {DESKTOP_DOWNLOADS[key].label}
+                </a>
+              ))}
+            </div>
+            <p className="sec-download-note">
+              Version {DESKTOP_VERSION}. Windows: if it says “Windows protected your PC”, click More info → Run anyway. Mac: open the file, drag Mmerℇ to Applications, then right-click it → Open the first time.
             </p>
           </div>
           <span className={`reminder-badge sec-badge-${desktopRecent ? 'active' : 'neutral'}`}>

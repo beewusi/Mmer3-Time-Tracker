@@ -28,7 +28,7 @@ cd desktop
 npm install
 npm start                 # try it (uses config.json)
 npm run dist:win          # on Windows → dist/Mmer3 Setup 1.0.1.exe
-npm run dist:mac          # on a Mac   → dist/Mmer3-1.0.1.dmg (also builds the Wi-Fi check)
+npm run dist:mac          # on a Mac   → dist/Mmer3-1.0.1-universal.dmg (Apple and Intel Macs; also builds the Wi-Fi check)
 ```
 
 Not code-signed (our own laptops):
